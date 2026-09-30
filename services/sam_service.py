@@ -1,5 +1,6 @@
 """Official SAM 2 box-prompt segmentation with a lightweight mock mode."""
 import numpy as np
+from PIL import Image
 
 from app.models import ModelConfig
 from app.paths import read_rgba
@@ -82,6 +83,16 @@ class SAMService:
     def predict_candidates(self, image, prompts):
         """Local-refinement boundary; always return every SAM mask for CV ranking."""
         self.load()
+        original_size = image.size
+        scale = getattr(self, '_inference_scale', 1.0)
+        if scale < 1:
+            image = image.resize((max(1, round(image.width*scale)), max(1, round(image.height*scale))), Image.Resampling.LANCZOS)
+            ratio = np.array([image.width/original_size[0], image.height/original_size[1]])
+            prompts = dict(prompts)
+            for key in ('box', 'point_coords'):
+                if key in prompts and prompts[key] is not None:
+                    values = np.asarray(prompts[key])
+                    prompts[key] = (values.reshape(-1, 2)*ratio).reshape(values.shape)
         with self._torch.inference_mode():
             try:
                 self._predictor.set_image(np.array(image.convert("RGB"), copy=True))
@@ -92,6 +103,9 @@ class SAMService:
                     masks = masks[None]
                 if masks.shape != (len(scores), image.height, image.width) or not scores.size or not np.isfinite(scores).all() or not np.isfinite(masks).all():
                     raise ValueError("SAM 2 returned invalid local candidates")
+                if image.size != original_size:
+                    masks = np.stack([np.asarray(Image.fromarray((mask > 0).astype(np.uint8)).resize(
+                        original_size, Image.Resampling.NEAREST)) for mask in masks])
                 return masks, scores
             finally:
                 self._predictor.reset_predictor()

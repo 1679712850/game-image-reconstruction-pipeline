@@ -66,13 +66,14 @@ class QwenConfig(Options):
     """Local Diffusers settings; a blank path never resolves to a Hub ID."""
 
     model_path: Path | None = None
+    quantized_model_path: Path | None = None
     dtype: Literal["auto", "float32", "float16", "bfloat16"] = "auto"
     num_inference_steps: int = Field(default=50, gt=0)
     true_cfg_scale: float = Field(default=4.0, ge=1)
     negative_prompt: str = " "
     seed: int = Field(default=0, ge=0)
 
-    @field_validator("model_path", mode="before")
+    @field_validator("model_path", "quantized_model_path", mode="before")
     @classmethod
     def blank_path_is_unconfigured(cls, value: object) -> object:
         """Null/empty strings mean unconfigured, never the current directory."""
@@ -131,6 +132,8 @@ def load_models(path: Path) -> ModelConfig:
         (data, "cache_dir"), (data.get("sam", {}), "checkpoint"),
         (data.get("qwen_layered", {}), "model_path"),
         (data.get("qwen_image_edit", {}), "model_path"),
+        (data.get("qwen_layered", {}), "quantized_model_path"),
+        (data.get("qwen_image_edit", {}), "quantized_model_path"),
     ):
         if parent.get(key) and str(parent[key]).strip():
             value = Path(parent[key]).expanduser()

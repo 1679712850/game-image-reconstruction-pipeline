@@ -5,7 +5,8 @@ from PIL import Image
 
 from app.models import ModelConfig
 from app.paths import read_rgba
-from services.qwen_support import load_local_pipeline, local_pipeline_path
+from services.execution import operation_span
+from services.qwen_support import load_local_pipeline, local_pipeline_path, inference_image
 
 
 class ImageEditService:
@@ -63,18 +64,47 @@ class ImageEditService:
             generator = self._torch.Generator(device="cpu").manual_seed(settings.seed)
             with self._torch.inference_mode():
                 result = self._pipeline(
-                    image=source.convert("RGB"), prompt=prompt.strip(),
+                    image=inference_image(self, source.convert("RGB")), prompt=prompt.strip(),
                     negative_prompt=settings.negative_prompt, true_cfg_scale=settings.true_cfg_scale,
                     num_inference_steps=settings.num_inference_steps,
                     generator=generator, num_images_per_prompt=1, output_type="pil",
                 )
             if not isinstance(result.images, (list, tuple)) or len(result.images) != 1 or not isinstance(result.images[0], Image.Image):
                 raise ValueError("Qwen-Image-Edit must return exactly one PIL image")
-            candidate = result.images[0].convert("RGB")
-            if candidate.size != source.size:
-                candidate = candidate.resize(source.size, Image.Resampling.LANCZOS)
-            edited = Image.composite(candidate, source.convert("RGB"), mask).convert("RGBA")
-            edited.putalpha(source.getchannel("A"))
-        target.parent.mkdir(parents=True, exist_ok=True)
-        edited.save(target, format="PNG")
+            with operation_span("image_edit.composite", model="image_edit"):
+                candidate = result.images[0].convert("RGB")
+                if candidate.size != source.size:
+                    candidate = candidate.resize(source.size, Image.Resampling.LANCZOS)
+                edited = Image.composite(candidate, source.convert("RGB"), mask).convert("RGBA")
+                edited.putalpha(source.getchannel("A"))
+        with operation_span("image_edit.save", model="image_edit"):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            edited.save(target, format="PNG")
+        return str(target)
+
+    def generate_object(self, image_path: str, *, prompt: str, output_path: str | Path) -> str:
+        """Generate a complete silhouette; RGB results must be segmented before QA."""
+        if not prompt.strip():
+            raise ValueError('Generation requires a nonempty constrained prompt')
+        source = read_rgba(image_path)
+        target = Path(output_path).resolve()
+        if target == Path(image_path).resolve():
+            raise ValueError('Generation must not overwrite source')
+        if self.mock:
+            generated = source
+        else:
+            self.load()
+            settings = self.config.qwen_image_edit
+            with self._torch.inference_mode():
+                result = self._pipeline(image=inference_image(self, source.convert('RGB')), prompt=prompt,
+                    negative_prompt=settings.negative_prompt, true_cfg_scale=settings.true_cfg_scale,
+                    num_inference_steps=settings.num_inference_steps,
+                    generator=self._torch.Generator(device='cpu').manual_seed(settings.seed),
+                    num_images_per_prompt=1, output_type='pil')
+            if not isinstance(result.images, (list, tuple)) or len(result.images) != 1 or not isinstance(result.images[0], Image.Image):
+                raise ValueError('Qwen must return exactly one PIL image')
+            generated = result.images[0]
+        with operation_span('image_edit.save', model='image_edit'):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            generated.save(target, 'PNG')
         return str(target)

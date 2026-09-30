@@ -47,3 +47,10 @@ class SceneState(TypedDict, total=False):
     detection_coverage_review: dict
     p1_thresholds: dict
     p1_summary: dict
+
+    candidate_registry: dict
+    performance_report_path: str
+    timeline_path: str
+    psd_path: str
+    accepted_ownership: dict
+    resource_failures: list[dict]

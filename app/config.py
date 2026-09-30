@@ -5,6 +5,7 @@ from typing import Self
 import yaml
 from app.detection_config import DetectionConfig
 from app.p1_config import P1Config
+from app.resource_config import ResourcesConfig, CacheConfig, CandidateConfig
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -59,6 +60,9 @@ class OptionalStageConfig(Options):
 
 
 class PipelineConfig(Options):
+    resources: ResourcesConfig = Field(default_factory=ResourcesConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    candidates: CandidateConfig = Field(default_factory=CandidateConfig)
     p1: P1Config = Field(default_factory=P1Config)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     mock: bool = True

@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 
 from app.paths import read_rgba
+from services.execution import instance_scope
 from cv.tiles import tile_windows
 from schemas.object import BBox
 from segmentation.prompt_generator import generate_prompts
@@ -86,7 +87,8 @@ class LocalRefiner:
                 scale = max(1, min(scale, self.config.max_sam_input_size//max(crop.size)))
                 image = crop.resize((crop.width*scale, crop.height*scale), Image.Resampling.LANCZOS)
                 prompts, trace = generate_prompts(record, records if neighbors is None else neighbors, window, scale, attempt)
-                masks, scores = self.service.predict_candidates(image, prompts)
+                with instance_scope(record['id'], attempt):
+                    masks, scores = self.service.predict_candidates(image, prompts)
                 negatives = prompts["point_coords"][prompts["point_labels"] == 0].tolist()
                 metrics = [candidate_metrics(mask, prompts["box"], image, score, negatives) for mask, score in zip(masks, scores)]
                 best = max(range(len(metrics)), key=lambda i: metrics[i]["score"])

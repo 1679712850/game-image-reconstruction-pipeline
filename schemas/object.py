@@ -51,6 +51,15 @@ class SceneObject(BaseModel):
     crop_bbox: BBox | None = None
     mask_path: str | None = None
     asset_path: str | None = None
+    source_asset_path: str | None = None
+    source_mask_path: str | None = None
+    source_crop_bbox: BBox | None = None
+    accepted_asset: str | None = None
+    accepted_candidate_id: str | None = None
+    asset_mask_path: str | None = None
+    placement: dict = Field(default_factory=dict)
+    provenance: dict = Field(default_factory=dict)
+    needs_manual_review: bool = False
     hd_asset_path: str | None = None
     pivot: Pivot | None = None
     z_order: float = 0

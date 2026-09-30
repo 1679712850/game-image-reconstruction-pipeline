@@ -40,6 +40,14 @@ Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接�
 输出包含 `metadata/summary.json`、`scene.json` 中的 P1 汇总、归属图、未分配图和重建差异图。
 配置、重试预算、指标解释和实现边界见 [docs/P1_DECOMPOSITION.md](docs/P1_DECOMPOSITION.md)。
 
+## P2 候选回接与资源管理（2026-09-30）
+
+每个可见实例通过 Candidate Registry、QA/有限重试和排名选出唯一 `accepted_asset`。
+后续高清化、场景 PNG 与 PSD 图层使用该资产；保留原始空间信息，重建生成 alpha 的 mask。
+所有节点接入模型生命周期、版本化推理缓存、资源恢复和性能统计。
+默认生成仍关闭；候选选择、`scene.psd`、`performance_report.json`、`timeline.html` 默认输出。
+配置、回退规则与验证边界见 [docs/P2_CANDIDATES_RESOURCES.md](docs/P2_CANDIDATES_RESOURCES.md)。
+
 ## 安装与运行
 
 推荐 Python 3.11+。仓库根目录就是设计中的 `scene_reconstructor/` 项目根，
@@ -71,8 +79,7 @@ python -m unittest discover -s tests -v
 `--real` 启用 Grounding DINO + SAM 2；模型加载失败会明确报错，不会静默回退到 Mock。
 Mock 模式无需 API key、不发起模型请求、不下载模型权重。
 
-默认终端打印 16 个阶段；检测循环会重复打印对应阶段，retry 另行标记。
-默认图有 17 个业务节点，开启两个 Qwen 节点后有 19 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
+终端打印实际启用的阶段；检测循环会重复打印对应阶段，retry 另行标记。完成时打印 `Done. Reached END.`，
 `debug/run.json` 保存节点访问顺序及最终可序列化 State。
 
 ## Architecture
@@ -118,7 +125,8 @@ flowchart TD
     SCENE_QA -->|Continue within budgets| DETECT
     SCENE_QA -->|Stop or budget exhausted| P1
     P1 --> OWNER
-    OWNER --> UPSCALE
+    OWNER --> CANDIDATES[Candidate Generation + QA + Retry + Selection]
+    CANDIDATES --> UPSCALE
     UPSCALE --> META
     META --> REBUILD
     REBUILD --> EXPORT
@@ -138,7 +146,8 @@ nodes/        每个阶段独立模块，future.py 预留未来节点
 services/     VLM、Grounding、SAM、Upscale、Layered、Image Edit
 cv/           bbox、mask、crop、alpha、metrics、pivot、reconstruct
 schemas/      Pydantic SceneAnalysis / SceneObject / ObjectQA / SceneManifest
-exporters/    JSON / PNG；PSD / Godot 为显式占位接口
+exporters/    JSON / PNG / PSD；Godot 为显式占位接口
+candidates/   候选注册、QA、生成/重试、选择、坐标/alpha 回接
 prompts/      场景分析提示词、未来 QA 提示词
 config/       pipeline.yaml / categories.yaml / models.yaml
 input/        输入图（demo 自动创建）
@@ -271,12 +280,12 @@ graph.invoke(None, run_config)  # 继续到 END
 | Real-ESRGAN | services/upscale_service.py | 当前显式使用 Pillow Lanczos；生成式超分仍待实现 |
 | Qwen-Image-Layered | services/qwen_layered_service.py、nodes/decompose_layers.py | 本地 Diffusers 适配、可选节点、RGBA 导出；权重留空；Mock 单层透传 |
 | Qwen-Image-Edit | services/image_edit_service.py、nodes/complete_objects.py | 本地 Diffusers 编辑、mask 合成、候选导出；权重留空；Mock 无修改 |
-| PSD / Godot | exporters/psd_exporter.py、exporters/godot_exporter.py | 显式 NotImplementedError；不影响 V1 |
+| PSD / Godot | exporters/psd_exporter.py、exporters/godot_exporter.py | PSD 输出真实 RGBA 图层；Godot 仍为占位接口 |
 
 Grounding DINO、SAM 2 与 Qwen 的可选依赖方式见下文。Real-ESRGAN
 仍需后续接入。基础 requirements.txt 仅列出
 langgraph、langchain、pydantic、pillow、numpy、opencv-python、pyyaml、
-python-dotenv，没有 torch、transformers 或任何模型包。
+python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 
 ## 测试范围与剩余 TODO
 
@@ -284,10 +293,8 @@ python-dotenv，没有 torch、transformers 或任何模型包。
 重建坐标与 alpha 混合、Y-sort、pivot、scale 边界、schema 校验、配置、
 正常 graph、强制 retry、持续失败耗尽预算、无检测、checkpoint 暂停/恢复。
 
-后续逐步实现：Qwen 权重配置与真实验收、图层语义/所有权映射、
-Qwen-VL / Real-ESRGAN 等适配器、遮挡补全和新轮廓重分割、CV+VLM QA、
-retry diagnosis、背景覆盖与所有权处理、持久化 saver、
-人工交互 UI、PSD 与 Godot 导出。
+后续工作：Qwen 真实权重与 CUDA 峰值验收、生成质量评估、Real-ESRGAN、
+持久化 saver 和人工复核 UI、Godot 导出。P1/P2 已实现的能力和具体边界以对应文档为准。
 
 ## Grounding DINO + SAM 2 真实模式
 
@@ -399,12 +406,12 @@ qwen_image_edit:
 flowchart LR
     PLAN[plan_layers] --> LAYER[decompose_layers 可选]
     LAYER --> DETECT[detect_instances]
-    QA[qa_objects 结束重试] --> EDIT[complete_objects 可选]
+    QA[P1 归属完成] --> EDIT[complete_objects / select_candidates]
     EDIT --> UPSCALE[upscale_objects]
 ```
 
-未开启时直接走原来的相邻节点。两个新节点只返回状态增量，模型对象不进入
-checkpoint；retry 仍只处理已有失败实例，不重复调用 Qwen 生成。
+未开启生成时仍走 select_candidates 选择原始资产。节点只返回状态增量，模型对象不进入
+checkpoint；候选 RETRY 根据失败原因修改 prompt，受独立生成预算限制。
 
 ### 无模型 Demo
 
@@ -420,7 +427,7 @@ Layered Mock 生成一个像素不变的 RGBA 层，标记 `mock_passthrough`，
 必要时将完整图层画布缩放回输入场景尺寸，并同时记录 `model_size` 和 `canvas_size`。
 `order` 只记录返回顺序；图层语义、遮挡关系与正确合成顺序仍需验证。
 
-Image Edit 使用显式请求，不自动猜测要补全哪些物体：
+Image Edit 支持以下显式局部编辑请求；启用生成后也可根据遮挡/缺损 QA 自动选择修复策略：
 
 ```json
 [
@@ -462,16 +469,17 @@ PY
 Image Edit Mock 写出独立、像素不变的候选 PNG 并标记 `mock_noop`。
 真实适配器将提示词与 RGB 图传给编辑模型，然后在本地按 mask 合成结果，
 保留原始 alpha 与逻辑尺寸。**mask 不作为模型的原生 inpainting 参数**；
-这版不能补出原 alpha 外的新轮廓，也不宣称完成遮挡推断。
-完整遮挡补全还需要生成内容后的 SAM 重分割、坐标/pivot 更新及 QA。
+显式局部 RGB 编辑不改变原 alpha；P2 的完整生成路径另行恢复 SAM 轮廓、
+归一化尺寸、恢复 anchor 并进行候选 QA。Qwen 真实质量仍需本地权重验收。
 
 ### 新增输出与边界
 
 ```text
 output/qwen_mock_demo/
 ├── layers/layer_000.png
-├── assets_edited/tree_001.png
-├── edit_masks/tree_001.png
+├── candidates/tree_001/inpaint_v1_raw.png
+├── candidates/tree_001/edit_mask.png
+├── metadata/candidates.json
 ├── assets/、assets_hd/、masks/、debug/
 ├── scene.json
 └── reconstruction.png
@@ -479,14 +487,12 @@ output/qwen_mock_demo/
 
 `scene.json` 版本为 `1.1`，保留已有 `layers` 语义计划，另增
 `decomposed_layers` 与 `object_edits`。新增文件路径同样相对输出目录，
-包含在 `exported_assets` 内。真实生成结果标记 `manual_review`。
-原始 `asset_path`、mask、pivot、z_order 不被生成候选覆盖；
-当前 `reconstruction.png` 仍由原始实例资产重建。
-
-Layered 图层和 Image Edit 候选目前是可导出的附加产物，
-尚未用于细分检测、自动填补漏检区域或替换实例纹理。
-接入这两个接口本身不会解决复杂大图只检测到少量对象的问题；
-切片检测、分类提示与覆盖率检查由下述场景循环提供。
+包含在 `exported_assets` 内。兼容的 `object_edits` 保留原始编辑记录；最终决策读取
+`candidate_registry`、`accepted_asset` 和 provenance。
+原始资产与 mask 保留在 Registry 中；通过 QA 和 ranking 的候选同步替换
+`asset_path`，供重建、高清化和 PSD 使用，原始 anchor 与场景坐标保留。
+Layered 的可定位独立对象也参与该选择；背景分层保留为独立证据。
+详见 [P2 文档](docs/P2_CANDIDATES_RESOURCES.md)。
 
 ## 多轮场景检查与残图检测
 

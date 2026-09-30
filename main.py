@@ -78,6 +78,9 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
     if config.object_completion.enabled:
         index = next(i for i, item in enumerate(stages) if item[0] == "upscale_objects")
         stages.insert(index, ("complete_objects", "Generate edit candidates"))
+    if not config.object_completion.enabled:
+        index = next(i for i, item in enumerate(stages) if item[0] == "upscale_objects")
+        stages.insert(index, ("select_candidates", "Select accepted assets"))
     labels = {name: (index, label) for index, (name, label) in enumerate(stages, 1)}
 
     def progress(name: str) -> None:

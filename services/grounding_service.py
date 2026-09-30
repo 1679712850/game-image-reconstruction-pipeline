@@ -141,7 +141,10 @@ class GroundingService:
         phrases = [self.config.grounding.prompts.get(c, c.replace('_', ' ')) for c in categories]
         prompt = ". ".join(phrases) + "."
         with self._torch.inference_mode():
-            inputs = self._processor(images=image, text=prompt, return_tensors="pt").to(self._device)
+            scale = getattr(self, '_inference_scale', 1.0)
+            size_options = {'size': {'shortest_edge': max(128, round(800*scale)),
+                                     'longest_edge': max(128, round(1333*scale))}} if scale < 1 else {}
+            inputs = self._processor(images=image, text=prompt, return_tensors="pt", **size_options).to(self._device)
             outputs = self._model(**inputs)
             result = self._processor.post_process_grounded_object_detection(
                 outputs, input_ids=inputs["input_ids"],

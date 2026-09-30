@@ -4,6 +4,7 @@ from pathlib import Path
 from PIL import Image
 
 from app.paths import read_rgba
+from cv.layer_order import ordered_layers
 
 
 def reconstruct_scene(
@@ -13,8 +14,9 @@ def reconstruct_scene(
     if width <= 0 or height <= 0:
         raise ValueError("Scene dimensions must be positive")
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    for obj in sorted(objects, key=lambda item: item.get("z_order", 0)):
-        path, box = obj.get("asset_path"), obj.get("crop_bbox")
+    for obj in ordered_layers(objects):
+        path = obj.get("accepted_asset") or obj.get("asset_path")
+        box = obj.get("placement", {}).get("crop_bbox") or obj.get("crop_bbox")
         if not path or not box:
             continue  # An empty-mask manual-review record has no asset.
         asset = read_rgba(path)

@@ -21,7 +21,7 @@ def _referenced_paths(value):
             yield from _referenced_paths(child)
 
 
-def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnostics_enabled: bool = False) -> Callable[[SceneState], dict]:
+def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnostics_enabled: bool = False, psd_enabled: bool = False) -> Callable[[SceneState], dict]:
     """Bind export provenance; generated manifests explicitly mark mocks."""
     def export(state: SceneState) -> dict:
         """Persist validated metadata with portable asset paths."""
@@ -50,6 +50,11 @@ def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnosti
                 assets.update(str(p.resolve()) for p in (root/folder).glob('*') if p.is_file())
         # Build after P1 reporting so checkpoints and scene.json share the summary.
         manifest = build_manifest({**state, **updates}, mock, backends)
+        if psd_enabled:
+            from exporters.psd_exporter import export_psd
+            updates["psd_path"] = str(export_psd(manifest, root / "scene.psd", asset_root=root))
+            manifest.psd = "scene.psd"
+            assets.add(updates["psd_path"])
         scene_json = export_json(manifest, root / "scene.json")
         assets.add(scene_json)
         for obj in state.get("objects", []):
@@ -68,8 +73,12 @@ def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnosti
         for layer in state.get("terrain_layers", []):
             assets.update(path for path in (layer.get("asset_path"), layer.get("mask_path"), layer.get("visible_mask_path"),
                                             layer.get("complete_mask_path"), layer.get("complete_asset_path")) if path)
-        for key in ('objects', 'ownership', 'terrain_layers', 'retry_history'):
+        for key in ('objects', 'ownership', 'terrain_layers', 'retry_history', 'candidate_registry', 'accepted_ownership'):
             assets.update(_referenced_paths(state.get(key, {})))
+        assets.update(str(root / "debug" / "candidates" / f"{ident}_contact_sheet.png")
+                      for ident in state.get('candidate_registry', {}))
+        if (root / "metadata" / "candidates.json").exists():
+            assets.add(str(root / "metadata" / "candidates.json"))
         retry_path = root / "metadata" / "retries.json"
         retry_path.parent.mkdir(parents=True, exist_ok=True)
         from diagnostics.p1_report import portable

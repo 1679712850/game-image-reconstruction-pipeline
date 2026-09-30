@@ -6,7 +6,7 @@ from PIL import Image
 from app.models import ModelConfig
 from app.paths import read_rgba
 from schemas.generation import LayerAsset
-from services.qwen_support import load_local_pipeline, local_pipeline_path
+from services.qwen_support import load_local_pipeline, local_pipeline_path, inference_image
 
 
 class QwenLayeredService:
@@ -42,7 +42,8 @@ class QwenLayeredService:
             generator = self._torch.Generator(device="cpu").manual_seed(settings.seed)
             with self._torch.inference_mode():
                 result = self._pipeline(
-                    image=source, layers=settings.layers, resolution=settings.resolution,
+                    image=inference_image(self, source), layers=settings.layers,
+                    resolution=640 if getattr(self, "_inference_scale", 1) < 1 else settings.resolution,
                     num_inference_steps=settings.num_inference_steps,
                     true_cfg_scale=settings.true_cfg_scale, negative_prompt=settings.negative_prompt,
                     cfg_normalize=settings.cfg_normalize, use_en_prompt=settings.use_en_prompt,

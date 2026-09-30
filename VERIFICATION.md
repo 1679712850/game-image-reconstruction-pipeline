@@ -1,5 +1,32 @@
 # 验证记录（2026-09-30）
 
+## P2 候选回接与资源统计（2026-09-30）
+
+本轮完整回归：**141 项 unittest 全部通过**（新增 18 项 P2 测试）。
+pip check 无依赖冲突，git diff --check 通过；新增 psutil 7.2.2 用于 RSS/system RAM 统计。
+
+测试覆盖：生成候选像素实际进入 PNG/PSD/高清纹理/manifest、alpha 重建、
+原 anchor/scale/rotation/depth/z-order 继承、显式遮挡排序、Layered 候选回接、
+失败原因驱动的不同 retry prompt、排名和拒绝/回退、空候选保留复核信息、
+版本化内容缓存、跨输出目录文件恢复、损坏缓存 miss、模型懒加载、
+LRU/CPU offload/常驻上限、RAM/VRAM 预算、OOM 有限恢复和失败后继续导出。
+
+Mock CLI 连续两次运行 output/p2_validation 到达 END，4 个实例全部拥有 accepted_asset。
+第二次服务缓存 15 hit / 0 miss：vlm 1、detection 3、segmentation 4、qa 3、upscale 4。
+scene.psd 可被 Pillow 读取，merged RGB 与 reconstruction.png 逐像素一致；
+资产 alpha 与重建场景 mask 对应区域一致，manifest 别名一致、导出引用全部存在。
+可复查 debug/p2_validation.json、performance_report.json、timeline.html 和候选 contact sheet。
+
+额外使用已有 DINO/SAM 缓存尝试 160×120 离线 CPU 冒烟，配置和日志保存在
+output/p2_real_cpu/smoke.yaml、smoke.log。当时主机总 RAM 8 GiB、可用约 1 GiB，
+预算检查在 detector 权重加载前拦下任务的模型阶段；流程仍到达 END，
+scene.json.resource_failures 明确记录人工复核原因，没有静默宣称推理成功。
+因此本次真实 CPU 验证的是资源不足恢复路径，**不是神经网络推理质量验收**。
+未配置或运行真实 Qwen/CUDA/线上视觉 QA，显存与生成质量仍需对应环境实测。
+
+P2 实现和边界见 [文档](docs/P2_CANDIDATES_RESOURCES.md)。以下保留早期验收历史；
+早期“候选仅旁路导出”“PSD 占位”等描述已由本轮实现替代。
+
 ## P0 检测优化（2026-09-30）
 
 100 项自动测试通过（含 21 项 P0 回归），覆盖候选来源、坐标、分组、多尺度、

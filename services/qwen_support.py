@@ -29,9 +29,24 @@ def load_local_pipeline(name: str, settings: QwenConfig, device: str) -> tuple[A
         pipeline = pipeline_type.from_pretrained(
             str(path), torch_dtype=getattr(torch, dtype), local_files_only=True,
         )
+        # Diffusers exposes these only when the model supports them. VAE tiling
+        # reduces decode peaks without changing scene-space placement.
+        for method in ('enable_vae_tiling', 'enable_vae_slicing'):
+            if hasattr(pipeline, method):
+                getattr(pipeline, method)()
         pipeline = pipeline.to(selected)
     except (ImportError, AttributeError, OSError, RuntimeError, ValueError) as error:
         raise ModelUnavailableError(
             f"{name} local load failed: {error}. Install requirements-qwen.txt and provide the complete local pipeline; no weights are downloaded."
         ) from error
     return pipeline, torch
+
+
+def inference_image(service, image):
+    """Bound OOM retry resolution; caller restores source-space size after inference."""
+    from PIL import Image
+    scale = getattr(service, '_inference_scale', 1.0)
+    if scale >= 1:
+        return image
+    width, height = (max(16, round(v*scale/16)*16) for v in image.size)
+    return image.resize((width, height), Image.Resampling.LANCZOS)

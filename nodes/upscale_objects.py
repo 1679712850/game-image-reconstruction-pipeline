@@ -13,6 +13,8 @@ def make_upscale_objects(service: UpscaleService, enabled: bool) -> Callable[[Sc
         objects = []
         for record in state.get("objects", []):
             obj = dict(record)
+            if obj.get("accepted_asset"):
+                obj["asset_path"] = obj["accepted_asset"]
             if obj.get("asset_path"):
                 size = read_rgba(obj["asset_path"]).size
                 scale = choose_scale(*size) if enabled else 1

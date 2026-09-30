@@ -9,6 +9,9 @@ from ownership.pixel_owner import build_pixel_ownership
 def make_assign_ownership(config):
     def assign_ownership(state):
         records = [dict(obj) for obj in state.get('objects', [])]
+        for record in records:
+            record.update(source_asset_path=record.get('asset_path'),
+                          source_mask_path=record.get('mask_path'), source_crop_bbox=record.get('crop_bbox'))
         payload, _, terrain = build_pixel_ownership(state['source_path'], records, state['output_dir'],
                                                    config.crop.alpha_threshold, config.p1.preserve_residual_background)
         if config.p1.terrain_completion:

@@ -55,4 +55,8 @@ class SceneManifest(BaseModel):
     scene_qa: dict = Field(default_factory=dict)
     ownership: dict = Field(default_factory=dict)
     terrain_layers: list[dict] = Field(default_factory=list)
+    accepted_ownership: dict = Field(default_factory=dict)
+    resource_failures: list[dict] = Field(default_factory=list)
+    candidate_registry: dict = Field(default_factory=dict)
+    psd: str | None = None
     p1_summary: dict = Field(default_factory=dict)

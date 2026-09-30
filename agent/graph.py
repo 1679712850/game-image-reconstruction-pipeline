@@ -25,6 +25,7 @@ from nodes.retry_objects import make_retry_objects
 from nodes.segment_instances import make_segment_instances
 from nodes.upscale_objects import make_upscale_objects
 from services.runtime import ServiceBundle
+from services.execution import ExecutionRuntime
 from services.scene_review_service import SceneReviewService
 from nodes.scene_loop import make_update_remaining, make_qa_scene
 from nodes.assign_ownership import make_assign_ownership
@@ -33,13 +34,13 @@ from nodes.p1_scene import make_p1_scene
 
 def _observed(
     name: str, node: Callable[[SceneState], dict],
-    progress: Callable[[str], None] | None,
+    progress: Callable[[str], None] | None, runtime: ExecutionRuntime,
 ) -> Callable[[SceneState], dict]:
     """Add optional per-invocation logging without global or serialized state."""
     def invoke(state: SceneState) -> dict:
         if progress is not None:
             progress(name)
-        return node(state)
+        return runtime.run_node(name, node, state)
     return invoke
 
 
@@ -65,6 +66,8 @@ def build_graph(
         adapters.layered.validate_ready()
     if options.object_completion.enabled:
         adapters.image_edit.validate_ready()
+
+    runtime = ExecutionRuntime(options, adapters)
 
     def initialize(state: SceneState) -> dict:
         updates = load_image(state)
@@ -98,21 +101,21 @@ def build_graph(
                 image_edit_enabled=options.object_completion.enabled,
             ),
             **({"upscale": "disabled"} if not options.upscale.enabled else {}),
-        }, diagnostics_enabled=options.detection.diagnostics.enabled),
+        }, diagnostics_enabled=options.detection.diagnostics.enabled, psd_enabled=options.candidates.export_psd),
     }
     if options.p1.enabled:
         nodes['p1_scene'] = make_p1_scene(options, adapters.grounding, adapters.sam, reviewer)
         nodes['assign_ownership'] = make_assign_ownership(options)
     if options.layer_decomposition.enabled:
         nodes["decompose_layers"] = make_decompose_layers(adapters.layered)
-    if options.object_completion.enabled:
-        nodes["complete_objects"] = make_complete_objects(adapters.image_edit)
+    candidate_node = "complete_objects" if options.object_completion.enabled else "select_candidates"
+    nodes[candidate_node] = make_complete_objects(adapters.image_edit, options, adapters.sam, reviewer, runtime)
     if options.scene_loop.enabled:
         nodes["update_remaining"] = make_update_remaining(options)
         nodes["qa_scene"] = make_qa_scene(options, reviewer)
     builder = StateGraph(SceneState)
     for name, node in nodes.items():
-        builder.add_node(name, _observed(name, node, progress))
+        builder.add_node(name, _observed(name, node, progress, runtime))
 
     main_path = [
         "load_image", "analyze_scene", "plan_layers", "detect_instances",
@@ -123,7 +126,7 @@ def build_graph(
     builder.add_edge(START, main_path[0])
     for source, target in zip(main_path, main_path[1:]):
         builder.add_edge(source, target)
-    after_ownership = "complete_objects" if options.object_completion.enabled else "upscale_objects"
+    after_ownership = candidate_node
     after_scene = "p1_scene" if options.p1.enabled else after_ownership
     builder.add_conditional_edges("qa_objects", route_after_qa, {
         "retry": "retry_objects", "continue": "update_remaining" if options.scene_loop.enabled else after_scene,
@@ -132,8 +135,7 @@ def build_graph(
     if options.scene_loop.enabled:
         builder.add_edge("update_remaining", "qa_scene")
         builder.add_conditional_edges("qa_scene", route_after_scene_qa, {"detect": "detect_instances", "continue": after_scene})
-    if options.object_completion.enabled:
-        builder.add_edge("complete_objects", "upscale_objects")
+    builder.add_edge(candidate_node, "upscale_objects")
     if options.p1.enabled:
         builder.add_edge("p1_scene", "assign_ownership")
         builder.add_edge("assign_ownership", after_ownership)

@@ -6,3 +6,4 @@ numpy>=2,<3
 opencv-python>=4.10,<6
 pyyaml>=6,<7
 python-dotenv>=1,<2
+psutil>=6,<8

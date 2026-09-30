@@ -16,6 +16,8 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         data = dict(record)
         for key in ("asset_path", "hd_asset_path", "mask_path", "candidate_mask_path", "visible_mask_path", "full_mask_path"):
             data[key] = relative_asset(data.get(key), root)
+        if data.get("accepted_asset"):
+            data["asset_path"] = relative_asset(data["accepted_asset"], root)
         data.update(asset=data["asset_path"], hd_asset=data["hd_asset_path"])
         objects.append(ExportObject.model_validate(portable(data, root)))
     analysis = state["scene_analysis"]
@@ -51,6 +53,10 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         scene_qa={"rounds": state.get("scene_history", []), "stop_reason": state.get("scene_stop_reason", "")},
         ownership=portable(state.get("ownership", {}), root),
         terrain_layers=portable(state.get('terrain_layers', []), root),
+        accepted_ownership=portable(state.get("accepted_ownership", {}), root),
+        resource_failures=state.get("resource_failures", []),
+        candidate_registry=portable(state.get("candidate_registry", {}), root),
+        psd=relative_asset(state.get("psd_path"), root),
         p1_summary=portable(state.get('p1_summary', {}), root),
     )
 

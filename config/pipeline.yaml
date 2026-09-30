@@ -74,3 +74,35 @@ detection:
     max_redetections: 100
   diagnostics:
     enabled: true
+
+# P2: every instance passes selection, even with generation disabled.
+candidates:
+  automatic: true
+  accept_threshold: 0.80
+  retry_threshold: 0.55
+  severe_occlusion: 0.35
+  export_psd: true
+resources:
+  # All memory values are GiB. Estimates should be tuned for local checkpoints.
+  soft_vram: 20
+  max_vram: 22
+  max_ram: 64
+  gpu_models_max_resident: 1
+  max_generation_retry: 2
+  max_oom_retry: 2
+  keep_alive:
+    sam: true
+    grounding: false
+    image_edit: false
+    layered: false
+  estimated_vram:
+    grounding: 2
+    sam: 3
+    image_edit: 18
+    layered: 18
+  estimated_ram: {}
+cache:
+  enabled: true
+  directory: null  # output_dir/cache; set an absolute path for shared task caches
+  pipeline_version: p2-v1
+  prompt_version: p2-candidate-v1
