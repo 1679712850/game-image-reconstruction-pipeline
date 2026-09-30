@@ -8,7 +8,7 @@ from schemas.generation import LayerAsset, ObjectEditResult
 
 
 class SceneAnalysis(BaseModel):
-    """Structured-output target for a future LangChain VLM adapter."""
+    """Validated structured output from the scene analysis VLM."""
 
     model_config = ConfigDict(extra="forbid")
     projection: Literal["isometric", "top_down", "perspective", "unknown"]

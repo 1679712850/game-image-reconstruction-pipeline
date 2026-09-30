@@ -278,7 +278,7 @@ graph.invoke(None, run_config)  # 继续到 END
 
 | 能力 | 接入位置 | 当前情况 |
 |---|---|---|
-| Qwen-VL | services/vlm_service.py | 固定 Mock；可注入支持 structured output 的 LangChain chat model |
+| Qwen-VL | services/qwen_vl_backend.py、services/vlm_service.py | 本地 Transformers 推理 + LangChain/Pydantic 结构化输出；分析与 Scene QA 共享后端；权重留空 |
 | Grounding DINO | services/grounding_service.py | Transformers 真实推理、坐标裁剪、类别匹配、class-aware NMS |
 | SAM 2 | services/sam_service.py | Meta 官方 SAM 2.1；bbox prompt、原尺寸 mask、最佳候选选择 |
 | Real-ESRGAN | services/upscale_service.py | 本地 RealESRGAN_x4plus、分块推理、完成轮廓锁定、独立视觉 QA；权重留空 |
@@ -300,6 +300,52 @@ python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 后续工作：Qwen 真实权重与 CUDA 峰值验收、生成质量评估、Real-ESRGAN 真实质量验收、
 持久化 saver 和人工复核 UI、Godot 导出。P1/P2 已实现的能力和具体边界以对应文档为准。
 
+### 本地 Qwen-VL：场景分析与 Scene QA
+
+真实模式的场景分析现在使用本地 Qwen-VL；`pipeline.yaml` 和代码默认值中的
+`scene_loop.reviewer` 已切换为 `llm`，`models.yaml` 的 `scene_reviewer.provider` 默认为
+`local`。两者共享同一惰性后端，由资源管理器统一加载、卸载及处理 OOM，权重与推理参数
+参与缓存标识。默认阶段结束释放模型；可通过 `resources.keep_alive.qwen_vl` 保留 CPU
+副本，具体内存预算需按实际模型调整。
+
+支持 Transformers 的 **Qwen2.5-VL / Qwen3-VL Instruct（非 MoE）** 模型目录。
+目录必须包含 `config.json`、safetensors 权重和完整 processor/tokenizer/chat template 文件。
+本次只实现代码：`qwen_vl.model_path` 保持 `null`，没有下载权重。
+
+后续准备好本地模型时：
+
+```bash
+.venv/bin/python -m pip install -r requirements-vlm.txt
+# 在 config/models.yaml 中填写 qwen_vl.model_path 后运行；其他启用模型也需配置。
+.venv/bin/python main.py --input input/test.png --output output/local_vlm --real --offline
+```
+
+```yaml
+# config/models.yaml
+qwen_vl:
+  model_path: null  # 后续填写本地目录；相对路径基于 YAML 所在目录
+  dtype: auto
+  image_long_edge: 1536
+  max_images: 4
+  max_input_tokens: 16384
+  max_new_tokens: 2048
+scene_reviewer:
+  provider: local
+```
+
+本地后端始终使用 `local_files_only=True`、`trust_remote_code=False`，无需 API key，
+不会回退到 Hub 下载。模型路径为空时，在加载 DINO/SAM 和进入工作流之前明确报错。
+`--scene-reviewer rules` 只切换审查方式，真实场景分析仍需要 Qwen-VL。
+`--mock` 继续使用固定场景分析和规则 QA，无需这些可选依赖。
+
+推理通过多模态 chat template 输入图像，用确定性生成返回 JSON，仅解码新增 token。
+LangChain runnable 用 JSON schema 提示并经 Pydantic 校验；这不是原生 tool calling
+或保证有效 JSON 的约束解码。Scene QA 的解析/推理异常会进入 `manual_review`，不自动切换
+为规则通过；场景分析异常会终止运行。对象分类、候选 QA、遮挡分析复用该视觉接口。
+
+测试使用替身覆盖本地加载参数、图像/上下文上限、token 裁剪、结构校验、共享生命周期、
+缓存失效和 QA 异常路径。真实权重兼容性、视觉准确性、速度和显存峰值仍需实机验收。
+
 ## Grounding DINO + SAM 2 真实模式
 
 推荐 Python 3.11/3.12。保持基础依赖轻量，模型依赖另行安装：
@@ -308,9 +354,11 @@ python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-vision.txt
+python -m pip install -r requirements-vlm.txt
 # 官方 SAM 2 固定源码提交。CPU/macOS 无需编译 CUDA 扩展：
 SAM2_BUILD_CUDA=0 python -m pip install --no-build-isolation -r requirements-sam2.txt
 
+# 先填写 qwen_vl.model_path；启用的超分/生成模型另行配置。
 python main.py --input input/test.png --output output/real_test --real
 # 下载完成后可完全离线运行；找不到文件会报错，不访问 Hub：
 python main.py --input input/test.png --output output/real_test --real --offline --device cpu
@@ -332,9 +380,8 @@ CUDA 机器先按 PyTorch 官方安装说明选择匹配 CUDA 的 torch/torchvis
   MPS 为可选实验路径，本次只实测 CPU，不做设备出错后的静默回退。
 - `cache_dir`: Hub 缓存；相对路径基于 YAML 文件目录。
 - `local_files_only`: 离线加载；CLI `--offline` 可覆盖为 true。
-- `categories`: 英文检测短语。每项应是单个类别，不含句号或换行。
-  固定类别是检测提示，不代表物体一定存在；VLM 尚未接入。
-- `projection`: 用户提供的投影元数据，不由检测/分割模型推断。
+- `categories` / `projection`: 供显式注入 `ConfiguredSceneService` 的兼容配置。
+  默认真实流程由本地 Qwen-VL 推断类别与投影，不使用固定语义作为自动回退。
 - `grounding.model_id`: Hub ID 或本地 Transformers 模型目录；本地相对路径以 `./` 开头。
 - `grounding.revision` / `sam.revision`: 可设置固定 Hub commit 以重现模型版本。
 - `grounding.box_threshold` / `text_threshold`: 模型结果与文本匹配阈值。
@@ -354,10 +401,12 @@ refine/crop/QA/metadata/reconstruct/export 节点。没有手工框替换真实�
 
 ```json
 {
-  "analysis": "configured_categories",
+  "analysis": "qwen_vl_local",
   "grounding": "grounding_dino_transformers",
   "segmentation": "sam2_official",
-  "upscale": "lanczos"
+  "scene_review": "llm",
+  "scene_review_provider": "qwen_vl_local",
+  "upscale": "real_esrgan"
 }
 ```
 
@@ -538,19 +587,19 @@ LLM 调用异常时保留已有产物并标记 `manual_review`，不静默假装
   --output output/iterative_ruins --real --offline --device cpu \
   --scene-reviewer rules --max-rounds 3
 
-# 配置 LLM 视觉接口后
-.venv/bin/python -m pip install -r requirements-llm.txt
+# 配置本地 qwen_vl.model_path 后（默认 reviewer 已为 llm）
+.venv/bin/python -m pip install -r requirements-vlm.txt
 .venv/bin/python main.py --input 'input/宗门废墟.png' \
   --output output/llm_ruins --real --offline --scene-reviewer llm
 ```
 
-LLM 接入使用 `langchain-openai`，支持提供图像输入与 tool calling 的 OpenAI
-兼容视觉模型。复制 `.env.example` 为 `.env`，设置 `VLM_MODEL`、
-`VLM_BASE_URL`、`VLM_API_KEY`；也可通过 `config/models.yaml` 的
-`scene_reviewer` 配置模型、地址、超时和密钥环境变量名。
-密钥不写入 YAML 或运行记录。`--offline` 只控制 DINO/SAM 权重读取，
-**LLM 模式仍调用配置的接口并发送原图和残图**。Mock 模式总是使用规则审查。
-显式 `--scene-reviewer llm` 而配置缺失时，在昂贵视觉推理前明确报错。
+默认 LLM 审查使用上文的本地 Qwen-VL。可选远程审查需要显式设置
+`scene_reviewer.provider: api` 并安装 `requirements-llm.txt`，通过 `langchain-openai`
+调用支持图像输入与 tool calling 的 OpenAI 兼容端点。复制 `.env.example` 为 `.env`，设置
+`VLM_MODEL`、`VLM_BASE_URL`、`VLM_API_KEY`，或在 `scene_reviewer` 设置模型名、地址和密钥环境变量名。
+密钥不写入 YAML 或运行记录。**只有显式 API provider 会向端点发送图像，`--offline`
+不会禁止该 API 调用**。远程审查不改变场景分析仍使用本地 Qwen-VL 的配置。
+Mock 模式总是使用规则审查；真实模式配置缺失会在昂贵视觉推理前明确报错。
 
 新增诊断输出：
 

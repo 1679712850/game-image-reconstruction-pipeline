@@ -6,6 +6,7 @@ import unittest
 from PIL import Image
 
 from services.runtime import ServiceBundle
+from services.model_support import ModelUnavailableError
 
 
 class ServiceTests(unittest.TestCase):
@@ -33,9 +34,13 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(image.size, (1, 1))
                 self.assertEqual(image.getpixel((0, 0)), (20, 60, 40, 255))
 
-    def test_real_bundle_uses_configured_analysis_and_neural_upscale(self) -> None:
+    def test_real_bundle_uses_local_vlm_and_neural_upscale(self) -> None:
         services = ServiceBundle.create(mock=False)
-        self.assertIn("Configured", services.vlm.analyze_scene("unused.png").description)
+        with self.assertRaisesRegex(ModelUnavailableError, 'qwen_vl.model_path'):
+            services.vlm.analyze_scene("unused.png")
+        self.assertIs(services.vlm._local_backend, services.reviewer._local_backend)
+        self.assertEqual(services.provenance()["analysis"], "qwen_vl_local")
+        self.assertEqual(services.provenance()["scene_review"], "llm")
         self.assertEqual(services.grounding.detect("unused.png", []), [])
         self.assertEqual(services.sam.segment("unused.png", []), [])
         self.assertEqual(services.upscale.backend, "real_esrgan")

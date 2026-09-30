@@ -1,5 +1,6 @@
 """Optional Qwen stages, request validation and portable export integration."""
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -72,12 +73,14 @@ class QwenPipelineTests(unittest.TestCase):
         self.assertEqual(result["objects"][0]["asset_path"], obj["asset_path"])
 
     def test_empty_models_allowed_when_disabled_and_rejected_before_real_run(self) -> None:
-        real = ServiceBundle.create(mock=False)
+        # Isolate optional image generation from the mandatory VLM preflight.
+        mock = ServiceBundle.create()
+        real = replace(ServiceBundle.create(mock=False), vlm=mock.vlm, reviewer=mock.reviewer)
         with patch.object(real.grounding, "load") as load:
-            build_graph(PipelineConfig(mock=False), real)
+            build_graph(PipelineConfig(mock=False, scene_loop={'reviewer': 'rules'}), real)
             for stage in ("layer_decomposition", "object_completion"):
                 with self.subTest(stage=stage), self.assertRaisesRegex(ModelUnavailableError, "model_path is empty"):
-                    build_graph(PipelineConfig.model_validate({"mock": False, stage: {"enabled": True}}), real)
+                    build_graph(PipelineConfig.model_validate({"mock": False, 'scene_loop': {'reviewer': 'rules'}, stage: {"enabled": True}}), real)
             load.assert_not_called()
 
     def test_empty_edit_requests_skip_inference(self) -> None:

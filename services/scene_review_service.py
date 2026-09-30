@@ -15,17 +15,25 @@ from services.model_support import ModelUnavailableError
 class SceneReviewService:
     """Initialize once at composition; LLM failure never masquerades as success."""
 
-    def __init__(self, backend: str = "rules", config: SceneReviewerConfig | None = None, llm: Any = None):
+    def __init__(self, backend: str = "rules", config: SceneReviewerConfig | None = None, llm: Any = None, *, local_backend: Any = None):
         self.backend = backend
         self.config = config or SceneReviewerConfig()
-        self._structured = llm.with_structured_output(SceneReviewDecision) if llm is not None else None
-        self._llm = llm
+        self._local_backend = local_backend if backend == "llm" and llm is None and self.config.provider == "local" else None
+        self._llm = llm if llm is not None else self._local_backend
+        self._structured = self._llm.with_structured_output(SceneReviewDecision) if self._llm is not None else None
         self._prompt = (Path(__file__).resolve().parents[1] / "prompts" / "scene_qa.md").read_text(encoding="utf-8")
 
     def validate_ready(self) -> None:
         """Fail before expensive vision inference if explicit LLM settings are absent."""
-        if self.backend != "llm" or self._structured is not None:
+        if self.backend != "llm":
             return
+        if self._local_backend is not None:
+            self._local_backend.validate_ready()
+            return
+        if self._structured is not None:
+            return
+        if self.config.provider == "local":
+            raise ModelUnavailableError("Local Scene QA requires the shared qwen_vl.model_path backend")
         model = self.config.model or os.getenv("VLM_MODEL", "")
         key = os.getenv(self.config.api_key_env, "")
         if not model or not key:

@@ -51,9 +51,27 @@ class SAMConfig(Options):
     local_padding: int = Field(default=64, ge=0)
 
 
-class SceneReviewerConfig(Options):
-    """OpenAI-compatible vision endpoint; credentials stay in environment only."""
+class QwenVLConfig(Options):
+    """Local Qwen2.5-VL / Qwen3-VL Instruct inference; never a Hub download."""
 
+    model_path: Path | None = None
+    dtype: Literal["auto", "float32", "float16", "bfloat16"] = "auto"
+    image_long_edge: int = Field(default=1536, ge=256, le=4096)
+    max_images: int = Field(default=4, ge=1, le=8)
+    max_input_tokens: int = Field(default=16384, ge=512, le=131072)
+    max_new_tokens: int = Field(default=2048, ge=64, le=8192)
+
+    @field_validator("model_path", mode="before")
+    @classmethod
+    def blank_path_is_unconfigured(cls, value: object) -> object:
+        """An empty path is not the current directory or a remote model ID."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+
+class SceneReviewerConfig(Options):
+    """Use the shared local Qwen-VL by default; remote API is explicit opt-in."""
+
+    provider: Literal["local", "api"] = "local"
     model: str = ""
     base_url: str | None = None
     api_key_env: str = "VLM_API_KEY"
@@ -98,7 +116,7 @@ class UpscaleModelConfig(Options):
 
 
 class ModelConfig(Options):
-    """Explicit classical scene analysis and real detection/segmentation."""
+    """Local model settings and explicit opt-in remote Scene QA settings."""
 
     device: Literal["auto", "cpu", "cuda", "mps"] = "auto"
     cache_dir: Path = Path(".cache/models")
@@ -107,6 +125,7 @@ class ModelConfig(Options):
     projection: Literal["isometric", "top_down", "perspective", "unknown"] = "unknown"
     grounding: GroundingConfig = Field(default_factory=GroundingConfig)
     sam: SAMConfig = Field(default_factory=SAMConfig)
+    qwen_vl: QwenVLConfig = Field(default_factory=QwenVLConfig)
     qwen_layered: QwenLayeredConfig = Field(default_factory=QwenLayeredConfig)
     qwen_image_edit: QwenConfig = Field(default_factory=QwenConfig)
     scene_reviewer: SceneReviewerConfig = Field(default_factory=SceneReviewerConfig)
@@ -140,6 +159,7 @@ def load_models(path: Path) -> ModelConfig:
     for parent, key in (
         (data, "cache_dir"), (data.get("sam", {}), "checkpoint"),
         (data.get("upscale", {}), "checkpoint"),
+        (data.get("qwen_vl", {}), "model_path"),
         (data.get("qwen_layered", {}), "model_path"),
         (data.get("qwen_image_edit", {}), "model_path"),
         (data.get("qwen_layered", {}), "quantized_model_path"),

@@ -1,0 +1,6 @@
+# Optional local Qwen-VL adapter only. No model weights are downloaded.
+-r requirements.txt
+torch>=2.6,<3
+torchvision>=0.21,<1
+transformers>=5.9,<6
+safetensors>=0.5,<1

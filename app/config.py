@@ -48,7 +48,7 @@ class SceneLoopConfig(Options):
     min_coverage_gain: float = Field(default=0.002, ge=0, le=1)
     no_progress_patience: int = Field(default=2, ge=1, le=10)
     covered_box_threshold: float = Field(default=0.85, gt=0, le=1)
-    reviewer: str = "rules"
+    reviewer: str = "llm"
 
     @model_validator(mode="after")
     def validate_reviewer(self) -> Self:

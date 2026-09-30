@@ -37,7 +37,7 @@ scene_loop:
   min_coverage_gain: 0.002
   no_progress_patience: 2
   covered_box_threshold: 0.85
-  reviewer: rules
+  reviewer: llm
 # Optional stages; enable only with a complete local Diffusers model_path.
 layer_decomposition:
   enabled: false
@@ -118,6 +118,7 @@ resources:
     image_edit: false
     layered: false
   estimated_vram:
+    qwen_vl: 18
     grounding: 2
     sam: 3
     image_edit: 18

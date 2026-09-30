@@ -45,7 +45,10 @@ class ExecutionRuntime:
             service = getattr(services, name, None)
             if service is None:
                 continue
-            self.manager.register(name, service)
+            local_backend = getattr(service, '_local_backend', None)
+            model_name = 'qwen_vl' if local_backend is not None else name
+            if model_name not in self.manager.entries:
+                self.manager.register(model_name, local_backend if local_backend is not None else service)
             for method in methods:
                 if hasattr(service, method):
                     self._wrap(service, name, namespace, method)
@@ -68,6 +71,9 @@ class ExecutionRuntime:
         setattr(service, method, invoke)
 
     def infer(self, service, name, namespace, method, function, args, kwargs):
+        local_backend = getattr(service, '_local_backend', None)
+        model_name = 'qwen_vl' if local_backend is not None else name
+        model_service = local_backend if local_backend is not None else service
         parameters = dict(inspect.signature(function).bind(*args, **kwargs).arguments)
         instance_id = self.instance_id
         items = parameters.get('detections', [])
@@ -81,7 +87,10 @@ class ExecutionRuntime:
                     'method': method, 'mock': getattr(service, 'mock', None), 'backend': getattr(service, 'backend', None),
                     'settings': getattr(service, 'config', None).model_dump(mode='json') if hasattr(getattr(service, 'config', None), 'model_dump') else None, 'prompt': getattr(service, '_prompt', None)}
         from services.model_fingerprint import service_versions
-        identity['model_fingerprints'] = service_versions(getattr(service,'config',None),name,self.model_fingerprints)
+        if local_backend is not None:
+            identity['local_model'] = local_backend.config.qwen_vl.model_dump(mode='json')
+            identity['structured_output_version'] = local_backend.structured_output_version
+        identity['model_fingerprints'] = service_versions(getattr(model_service,'config',None),model_name,self.model_fingerprints)
         # P0 scanning owns call reservations. Legacy local retry calls also obey the run budget.
         if name == 'grounding' and method == '_infer_image' and self.node_name in {'retry_objects','p1_scene'}:
             if not self.detection_budget.consume('redetection'):
@@ -91,7 +100,7 @@ class ExecutionRuntime:
         key = self.cache.key(namespace, identity, parameters)
         hit, result = self.cache.get(namespace, key)
         if hit:
-            with self.profiler.span(name+'.'+method, 'cache', model=name, instance_id=self.instance_id, cache_hit=True):
+            with self.profiler.span(name+'.'+method, 'cache', model=model_name, instance_id=self.instance_id, cache_hit=True):
                 pass
             return result
         for attempt in range(self.config.resources.max_oom_retry+1):
@@ -101,18 +110,18 @@ class ExecutionRuntime:
             started = len(self.profiler.events)
             outer_detection = name == 'grounding' and method != '_infer_image'
             empty_segmentation = method in {'segment', 'segment_local'} and parameters.get('detections') == []
-            managed = name in self.manager.entries and not outer_detection and not empty_segmentation
+            managed = model_name in self.manager.entries and not outer_detection and not empty_segmentation
             try:
-                with self.profiler.span(name+'.'+method, 'service' if outer_detection else 'inference', model=name, instance_id=instance_id,
+                with self.profiler.span(name+'.'+method, 'service' if outer_detection else 'inference', model=model_name, instance_id=instance_id,
                     retry_count=max(self.retry_count, attempt), oom_retry=attempt, cache_hit=False) as event:
                     # Keep load timing separate from actual inference.
                     if managed:
-                        self.manager.load(name)
-                        self.manager.entries[name].active += 1
+                        self.manager.load(model_name)
+                        self.manager.entries[model_name].active += 1
                     try:
                         torch = sys.modules.get('torch')
                         gpu_start = gpu_end = None
-                        if torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available() and managed and self.manager.entries[name].status == 'GPU':
+                        if torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available() and managed and self.manager.entries[model_name].status == 'GPU':
                             gpu_start, gpu_end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
                             gpu_start.record()
                         result = function(*args, **kwargs)
@@ -123,7 +132,7 @@ class ExecutionRuntime:
                             event['gpu_time'] = None
                     finally:
                         if managed:
-                            self.manager.entries[name].active -= 1
+                            self.manager.entries[model_name].active -= 1
                     event['exclusive_duration'] = max(0, time.time()-event['start_time']-sum(
                         e['duration'] for e in self.profiler.events[started:] if e['kind'] in {'load', 'postprocess'}))
                 def failed(value):
@@ -134,7 +143,7 @@ class ExecutionRuntime:
                     return False
                 # Degraded inference has different effective parameters. Do not cache it
                 # under the original full-quality key or persist partial failures.
-                if attempt == 0 and not failed(result) and getattr(service, '_inference_scale', 1) == 1:
+                if attempt == 0 and not failed(result) and getattr(model_service, '_inference_scale', 1) == 1:
                     self.cache.put(namespace, key, result)
                 return result
             except Exception as error:
@@ -143,7 +152,7 @@ class ExecutionRuntime:
                 if attempt >= self.config.resources.max_oom_retry:
                     from services.model_support import ModelUnavailableError
                     raise ModelUnavailableError(f'{name} OOM recovery exhausted after {attempt} retries') from error
-                self.manager.recover(name, attempt+1)
+                self.manager.recover(model_name, attempt+1)
         raise AssertionError('unreachable')
 
     def run_node(self, name, function, state):

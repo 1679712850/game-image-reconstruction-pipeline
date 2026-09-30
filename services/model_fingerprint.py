@@ -29,7 +29,7 @@ def service_versions(settings: Any, name: str, cache: dict) -> list[dict[str,Any
     during a run are unsupported; restart the run to invalidate its frozen identity.
     """
     section = {'grounding':'grounding','sam':'sam','image_edit':'qwen_image_edit',
-               'layered':'qwen_layered','upscale':'upscale'}.get(name)
+               'layered':'qwen_layered','upscale':'upscale','qwen_vl':'qwen_vl'}.get(name)
     options = getattr(settings,section,None) if section else None
     if options is None:
         return []

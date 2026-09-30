@@ -13,7 +13,7 @@ class ResourcesConfig(BaseModel):
     max_oom_retry: int = Field(default=2, ge=0, le=5)
     keep_alive: dict[str, bool] = Field(default_factory=lambda: {'sam': True})
     estimated_vram: dict[str, float] = Field(default_factory=lambda: {
-        'grounding': 2, 'sam': 3, 'image_edit': 18, 'layered': 18})
+        'grounding': 2, 'sam': 3, 'image_edit': 18, 'layered': 18, 'qwen_vl': 18})
     estimated_ram: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode='after')

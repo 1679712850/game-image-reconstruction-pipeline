@@ -12,6 +12,7 @@ from services.sam_service import SAMService
 from services.upscale_service import UpscaleService
 from services.vlm_service import VLMService
 from services.scene_review_service import SceneReviewService
+from services.qwen_vl_backend import QwenVLBackend
 
 
 @dataclass(frozen=True)
@@ -27,16 +28,17 @@ class ServiceBundle:
     reviewer: SceneReviewService | None = None
 
     @classmethod
-    def create(cls, mock: bool = True, models: ModelConfig | None = None, reviewer_backend: str = "rules") -> "ServiceBundle":
+    def create(cls, mock: bool = True, models: ModelConfig | None = None, reviewer_backend: str = "llm") -> "ServiceBundle":
         """The only default composition point for service initialization."""
         if not mock:
             options = models or load_models(Path(__file__).resolve().parents[1] / "config" / "models.yaml")
+            local_vlm = QwenVLBackend(options)
             return cls(
-                vlm=ConfiguredSceneService(options),
+                vlm=VLMService(False, local_backend=local_vlm),
                 grounding=GroundingService(False, options), sam=SAMService(False, options),
                 upscale=UpscaleService(False, config=options),
                 layered=QwenLayeredService(False, options), image_edit=ImageEditService(False, options),
-                reviewer=SceneReviewService(reviewer_backend, options.scene_reviewer),
+                reviewer=SceneReviewService(reviewer_backend, options.scene_reviewer, local_backend=local_vlm),
             )
         return cls(
             vlm=VLMService(mock), grounding=GroundingService(mock),
@@ -46,12 +48,13 @@ class ServiceBundle:
         )
 
     def provenance(self, *, layered_enabled: bool = False, image_edit_enabled: bool = False) -> dict[str, str]:
-        """Describe each active stage without claiming real VLM or super-resolution."""
+        """Record configured adapters; this is not a model-quality certification."""
         return {
-            "analysis": "configured_categories" if isinstance(self.vlm, ConfiguredSceneService) else ("mock" if self.vlm.mock else "langchain_vlm"),
+            "analysis": "configured_categories" if isinstance(self.vlm, ConfiguredSceneService) else ("mock" if self.vlm.mock else "qwen_vl_local" if getattr(self.vlm, "_local_backend", None) is not None else "langchain_vlm"),
             "grounding": "mock" if self.grounding.mock else "grounding_dino_transformers",
             "segmentation": "mock" if self.sam.mock else "sam2_official",
             "scene_review": self.reviewer.backend if self.reviewer else "rules",
+            "scene_review_provider": "qwen_vl_local" if self.reviewer and getattr(self.reviewer, "_local_backend", None) is not None else "api_or_injected" if self.reviewer and self.reviewer.backend == "llm" else "rules",
             "upscale": self.upscale.backend,
             "layer_decomposition": ("mock_passthrough" if self.layered.mock else "qwen_image_layered_local") if layered_enabled else "disabled",
             "object_completion": ("mock_noop" if self.image_edit.mock else "qwen_image_edit_local") if image_edit_enabled else "disabled",

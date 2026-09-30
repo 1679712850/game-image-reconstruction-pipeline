@@ -57,6 +57,8 @@ def build_graph(
     options = config or PipelineConfig()
     adapters = services or ServiceBundle.create(mock=options.mock, reviewer_backend=options.scene_loop.reviewer)
     reviewer = adapters.reviewer or SceneReviewService(options.scene_loop.reviewer)
+    if not options.mock and hasattr(adapters.vlm, "validate_ready"):
+        adapters.vlm.validate_ready()
     if options.scene_loop.enabled or options.p1.enabled:
         if not options.mock and reviewer.backend != options.scene_loop.reviewer:
             raise ValueError("Injected scene reviewer backend differs from scene_loop.reviewer")

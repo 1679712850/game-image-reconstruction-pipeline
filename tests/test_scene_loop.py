@@ -173,7 +173,7 @@ class SceneLoopTests(unittest.TestCase):
         config = PipelineConfig(mock=False, scene_loop=SceneLoopConfig(reviewer="llm"))
         services = ServiceBundle.create(False, reviewer_backend="llm")
         with patch.dict('os.environ', {}, clear=True), patch.object(services.grounding, 'load') as load:
-            with self.assertRaisesRegex(ModelUnavailableError, 'VLM_MODEL'):
+            with self.assertRaisesRegex(ModelUnavailableError, 'qwen_vl.model_path'):
                 build_graph(config, services)
             load.assert_not_called()
 
@@ -204,7 +204,7 @@ class SceneLoopTests(unittest.TestCase):
                 'langchain_openai.ChatOpenAI', side_effect=lambda **kw: ChatOpenAI(http_client=client, **kw),
             ):
                 reviewer = SceneReviewService('llm', SceneReviewerConfig(
-                    model='vision-test', base_url='https://test.invalid/v1', api_key_env='TEST_SCENE_KEY',
+                    provider='api', model='vision-test', base_url='https://test.invalid/v1', api_key_env='TEST_SCENE_KEY',
                 ))
                 reviewer.validate_ready()
                 result = reviewer.review(str(self.source),str(self.source), {'accepted_coverage': .1})

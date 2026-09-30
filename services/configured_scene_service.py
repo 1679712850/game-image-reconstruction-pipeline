@@ -11,6 +11,9 @@ class ConfiguredSceneService(VLMService):
         self.mock = False
         self.config = config
 
+    def validate_ready(self) -> None:
+        """This explicitly injected deterministic adapter requires no model."""
+
     def analyze_scene(self, image_path: str) -> SceneAnalysis:
         """Return explicit detection prompts without inferring scene semantics."""
         return SceneAnalysis(
