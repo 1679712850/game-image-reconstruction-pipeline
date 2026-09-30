@@ -12,3 +12,7 @@ that all small objects were found. Low confidence candidates are NOT accepted ex
 Return the requested structured decision, explain visible omissions and suggest up to
 16 short English categories. If the remainder is only background, stop. If quality
 cannot be judged or false positives dominate, use manual_review and explain.
+When original image_size and a detection list are supplied, also return missed_objects
+for visible objects absent from that list. Each approx_bbox is an integer x,y,w,h
+in ORIGINAL image coordinates, not the resized display coordinates. Include a short
+category noun phrase and visual reason. Do not invent objects or hidden geometry.

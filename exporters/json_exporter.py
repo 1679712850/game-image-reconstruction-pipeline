@@ -5,6 +5,7 @@ from pathlib import Path
 from agent.state import SceneState
 from app.paths import relative_asset
 from schemas.scene import ExportObject, SceneManifest
+from diagnostics.p1_report import portable
 
 
 def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | None = None) -> SceneManifest:
@@ -13,10 +14,10 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
     objects = []
     for record in state.get("objects", []):
         data = dict(record)
-        for key in ("asset_path", "hd_asset_path", "mask_path"):
+        for key in ("asset_path", "hd_asset_path", "mask_path", "candidate_mask_path", "visible_mask_path", "full_mask_path"):
             data[key] = relative_asset(data.get(key), root)
         data.update(asset=data["asset_path"], hd_asset=data["hd_asset_path"])
-        objects.append(ExportObject.model_validate(data))
+        objects.append(ExportObject.model_validate(portable(data, root)))
     analysis = state["scene_analysis"]
     preview = state.get("reconstruction_path")
     layers, edits = [], []
@@ -38,6 +39,7 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         detection={"rounds": [{key: run.get(key) for key in ("round", "global_candidates", "tile_candidates", "combined_candidates", "after_dedup", "after_filter", "failed_tiles", "small_object_report")} for run in state.get("detection_runs", [])],
                    "review_candidate_pool": [c for run in state.get("detection_runs", []) for c in run.get("review_candidate_pool", [])]},
         retry_count=state.get("retry_count", 0),
+        retry_history=portable(state.get("retry_history", []), root),
         unresolved_objects=state.get("failed_objects", []),
         reconstruction=relative_asset(preview, root) if preview else None,
         reconstruction_score=state.get("reconstruction_score") if preview else None,
@@ -47,6 +49,9 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
                   "mask": relative_asset(state.get("coverage_mask_path") or None, root),
                   "definition": "Union of masks over nontransparent source pixels; not semantic recall"},
         scene_qa={"rounds": state.get("scene_history", []), "stop_reason": state.get("scene_stop_reason", "")},
+        ownership=portable(state.get("ownership", {}), root),
+        terrain_layers=portable(state.get('terrain_layers', []), root),
+        p1_summary=portable(state.get('p1_summary', {}), root),
     )
 
 

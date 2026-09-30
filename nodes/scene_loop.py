@@ -69,6 +69,10 @@ def make_qa_scene(config: PipelineConfig, reviewer: SceneReviewService) -> Calla
         elif state.get("scene_no_progress", 0) >= limits.no_progress_patience:
             hard_stop = "no_progress"
         more = decision.continue_detection and not hard_stop and failure is None
+        if config.p1.enabled and not config.mock and more:
+            # P1 performs problem-region detection after scene QA instead of another whole-image pass.
+            more = False
+            hard_stop = 'targeted_p1_review'
         report = {**metrics, "backend": reviewer.backend, "decision": decision.model_dump(),
                   "continue_detection": more, "stop_reason": hard_stop or ("" if more else "reviewer_stop"),
                   "reviewer_error": failure,

@@ -96,7 +96,8 @@ class PipelineTests(unittest.TestCase):
         services = replace(ServiceBundle.create(), sam=EmptySAM())
         visits = []
         graph = build_graph(PipelineConfig(max_retry=2), services, progress=visits.append)
-        state = graph.invoke(self.initial(), {"recursion_limit": 30})
+        # Includes the explicit P1 scene review and ownership nodes after the retries.
+        state = graph.invoke(self.initial(), {"recursion_limit": 36})
         self.assertEqual(visits.count("retry_objects"), 4)
         self.assertEqual(state["detection_round"], 2)
         self.assertEqual(state["scene_stop_reason"], "no_progress")

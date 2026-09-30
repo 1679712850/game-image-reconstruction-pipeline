@@ -27,6 +27,8 @@ from nodes.upscale_objects import make_upscale_objects
 from services.runtime import ServiceBundle
 from services.scene_review_service import SceneReviewService
 from nodes.scene_loop import make_update_remaining, make_qa_scene
+from nodes.assign_ownership import make_assign_ownership
+from nodes.p1_scene import make_p1_scene
 
 
 def _observed(
@@ -54,7 +56,7 @@ def build_graph(
     options = config or PipelineConfig()
     adapters = services or ServiceBundle.create(mock=options.mock, reviewer_backend=options.scene_loop.reviewer)
     reviewer = adapters.reviewer or SceneReviewService(options.scene_loop.reviewer)
-    if options.scene_loop.enabled:
+    if options.scene_loop.enabled or options.p1.enabled:
         if not options.mock and reviewer.backend != options.scene_loop.reviewer:
             raise ValueError("Injected scene reviewer backend differs from scene_loop.reviewer")
         reviewer.validate_ready()
@@ -82,14 +84,14 @@ def build_graph(
         "analyze_scene": make_analyze_scene(adapters.vlm),
         "plan_layers": make_plan_layers(taxonomy),
         "detect_instances": make_detect_instances(adapters.grounding, options.exercise_retry, options.scene_loop if options.scene_loop.enabled else None, options.detection),
-        "segment_instances": make_segment_instances(adapters.sam, options.detection),
+        "segment_instances": make_segment_instances(adapters.sam, options.detection, options.p1),
         "refine_masks": make_refine_masks(options.crop.alpha_threshold),
         "crop_objects": make_crop_objects(options.crop),
         "qa_objects": make_qa_objects(options),
-        "retry_objects": make_retry_objects(options, adapters.sam),
+        "retry_objects": make_retry_objects(options, adapters.sam, reviewer, adapters.grounding),
         "upscale_objects": make_upscale_objects(adapters.upscale, options.upscale.enabled),
         "build_metadata": build_metadata,
-        "reconstruct_scene": make_reconstruct_scene(options.reconstruction.enabled),
+        "reconstruct_scene": make_reconstruct_scene(options.reconstruction.enabled, options.p1),
         "export": make_export(options.mock, {
             **adapters.provenance(
                 layered_enabled=options.layer_decomposition.enabled,
@@ -98,6 +100,9 @@ def build_graph(
             **({"upscale": "disabled"} if not options.upscale.enabled else {}),
         }, diagnostics_enabled=options.detection.diagnostics.enabled),
     }
+    if options.p1.enabled:
+        nodes['p1_scene'] = make_p1_scene(options, adapters.grounding, adapters.sam, reviewer)
+        nodes['assign_ownership'] = make_assign_ownership(options)
     if options.layer_decomposition.enabled:
         nodes["decompose_layers"] = make_decompose_layers(adapters.layered)
     if options.object_completion.enabled:
@@ -118,7 +123,8 @@ def build_graph(
     builder.add_edge(START, main_path[0])
     for source, target in zip(main_path, main_path[1:]):
         builder.add_edge(source, target)
-    after_scene = "complete_objects" if options.object_completion.enabled else "upscale_objects"
+    after_ownership = "complete_objects" if options.object_completion.enabled else "upscale_objects"
+    after_scene = "p1_scene" if options.p1.enabled else after_ownership
     builder.add_conditional_edges("qa_objects", route_after_qa, {
         "retry": "retry_objects", "continue": "update_remaining" if options.scene_loop.enabled else after_scene,
     })
@@ -128,6 +134,9 @@ def build_graph(
         builder.add_conditional_edges("qa_scene", route_after_scene_qa, {"detect": "detect_instances", "continue": after_scene})
     if options.object_completion.enabled:
         builder.add_edge("complete_objects", "upscale_objects")
+    if options.p1.enabled:
+        builder.add_edge("p1_scene", "assign_ownership")
+        builder.add_edge("assign_ownership", after_ownership)
     for source, target in (
         ("upscale_objects", "build_metadata"),
         ("build_metadata", "reconstruct_scene"),

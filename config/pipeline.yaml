@@ -1,4 +1,17 @@
 mock: true
+p1:
+  enabled: true
+  max_local_crop_size: 1024
+  min_local_size: 512
+  max_sam_input_size: 2048
+  max_detection_retry: 2
+  max_segmentation_retry: 3
+  max_scene_retry: 2
+  unassigned_threshold: 0.01
+  overlap_threshold: 0.01
+  preserve_residual_background: true
+  terrain_completion: true
+  lpips: false
 max_retry: 1
 exercise_retry: false
 crop:

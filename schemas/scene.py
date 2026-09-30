@@ -46,9 +46,13 @@ class SceneManifest(BaseModel):
     environment_effects: list[ExportObject] = Field(default_factory=list)
     detection: dict = Field(default_factory=dict)
     retry_count: int
+    retry_history: list[dict] = Field(default_factory=list)
     unresolved_objects: list[str] = Field(default_factory=list)
     reconstruction: str | None = None
     reconstruction_score: float | None = None
     reconstruction_score_definition: str = "1 - mean absolute RGBA error / 255 over the full canvas"
     coverage: dict = Field(default_factory=dict)
     scene_qa: dict = Field(default_factory=dict)
+    ownership: dict = Field(default_factory=dict)
+    terrain_layers: list[dict] = Field(default_factory=list)
+    p1_summary: dict = Field(default_factory=dict)

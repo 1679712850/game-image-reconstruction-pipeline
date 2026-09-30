@@ -29,7 +29,9 @@ def crop_rgba_by_mask(
     if min(x, y) < 0 or min(w, h) <= 0 or x + w > source.width or y + h > source.height:
         raise ValueError("Crop bbox is outside the source image")
     crop = source.crop((x, y, x + w, y + h))
-    crop.putalpha(Image.fromarray(array[y:y + h, x:x + w]))
+    alpha = np.asarray(source)[:, :, 3].astype(np.uint16)
+    combined = ((alpha * array.astype(np.uint16) + 127) // 255).astype(np.uint8)
+    crop.putalpha(Image.fromarray(combined[y:y + h, x:x + w]))
     if output_path is not None:
         target = Path(output_path)
         target.parent.mkdir(parents=True, exist_ok=True)

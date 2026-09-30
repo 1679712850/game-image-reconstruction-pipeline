@@ -71,6 +71,10 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
     ]
     if config.layer_decomposition.enabled:
         stages.insert(3, ("decompose_layers", "Decompose RGBA layers"))
+    if config.p1.enabled:
+        index = next(i for i, item in enumerate(stages) if item[0] == "upscale_objects")
+        stages[index:index] = [("p1_scene", "Review coverage and retry problem regions"),
+                              ("assign_ownership", "Resolve visible ownership and complete terrain")]
     if config.object_completion.enabled:
         index = next(i for i, item in enumerate(stages) if item[0] == "upscale_objects")
         stages.insert(index, ("complete_objects", "Generate edit candidates"))

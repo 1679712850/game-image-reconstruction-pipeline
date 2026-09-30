@@ -6,7 +6,8 @@
 
 V1 的重点是**可运行且可逐步替换模型的框架**。Mock 不理解真实图像内容：
 类别固定，检测框按图像比例生成，SAM 返回矩形 mask，高清化采用 Pillow Lanczos。
-重建图只包含这些矩形选区，未提取的草地、道路等区域透明。它验证坐标与合成流程，
+P1 默认将未分类原图像素保存在明确标记的 residual 背景层；这些像素不计入语义覆盖率。
+关闭 P1 后，重建图仍只包含矩形选区，未提取区域透明。Mock 验证坐标与合成流程，
 **不代表已经实现完整地图的语义分割、无损还原或生成式超分**。
 
 已接入真实 Grounding DINO（Transformers）和官方 SAM 2.1，并在 CPU 上完成
@@ -28,6 +29,16 @@ Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接�
 
 实现边界、字段、配置优先级、诊断解释和真实小目标冒烟结果见
 [docs/DETECTION_P0.md](docs/DETECTION_P0.md)。测试验证机制正确性；真实召回率仍需标注集对照。
+
+## P1 地形分层与像素归属（2026-09-30）
+
+默认启用局部高分辨率 SAM、多候选评分、类别化后处理、terrain / instance / hybrid / effect
+分类、可见像素唯一归属，以及按失败原因触发的局部重试。地形按语义类别合并，
+原始候选 mask、可见 mask 和推测补全结果分别保存。
+
+独立的 `p1_scene` 和 `assign_ownership` 节点在对象补全、高清化之前运行。
+输出包含 `metadata/summary.json`、`scene.json` 中的 P1 汇总、归属图、未分配图和重建差异图。
+配置、重试预算、指标解释和实现边界见 [docs/P1_DECOMPOSITION.md](docs/P1_DECOMPOSITION.md)。
 
 ## 安装与运行
 
@@ -60,8 +71,8 @@ python -m unittest discover -s tests -v
 `--real` 启用 Grounding DINO + SAM 2；模型加载失败会明确报错，不会静默回退到 Mock。
 Mock 模式无需 API key、不发起模型请求、不下载模型权重。
 
-默认终端打印 14 个阶段；检测循环会重复打印对应阶段，retry 另行标记。
-默认图有 15 个业务节点，开启两个 Qwen 节点后有 17 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
+默认终端打印 16 个阶段；检测循环会重复打印对应阶段，retry 另行标记。
+默认图有 17 个业务节点，开启两个 Qwen 节点后有 19 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
 `debug/run.json` 保存节点访问顺序及最终可序列化 State。
 
 ## Architecture
@@ -78,13 +89,15 @@ flowchart TD
     ANALYZE[Scene Analysis]
     PLAN[Layer Planning]
     DETECT[Grounding DINO: Full Image + Overlapping Tiles]
-    SEGMENT[SAM 2]
+    SEGMENT[Element Classification + Local High-Resolution SAM 2]
     REFINE[Mask Refinement]
     CROP[Tight Bounding Box Crop]
     QA[Object QA]
     RETRY[Retry]
     REMAIN[Commit Assets + Whiten Accepted Mask Pixels]
     SCENE_QA[Coverage + LLM Scene Review]
+    P1[P1 Coverage QA + Targeted Local Retry]
+    OWNER[Pixel Ownership + Terrain Completion + Visible Crops]
     UPSCALE[Upscale]
     META[Build Metadata]
     REBUILD[Reconstruct Scene]
@@ -103,7 +116,9 @@ flowchart TD
     RETRY --> QA
     REMAIN --> SCENE_QA
     SCENE_QA -->|Continue within budgets| DETECT
-    SCENE_QA -->|Stop or budget exhausted| UPSCALE
+    SCENE_QA -->|Stop or budget exhausted| P1
+    P1 --> OWNER
+    OWNER --> UPSCALE
     UPSCALE --> META
     META --> REBUILD
     REBUILD --> EXPORT

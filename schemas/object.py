@@ -62,3 +62,23 @@ class SceneObject(BaseModel):
     metrics: dict[str, float | int | bool] = Field(default_factory=dict)
     error: str | None = None
     mock_retry_resolved: bool = False
+    element_type: Literal["terrain", "instance", "hybrid", "effect"] = "instance"
+    layer_group: str = "other"
+    requires_individual_export: bool = True
+    requires_inpainting: bool = False
+    classification_reason: str = ""
+    classification_confidence: float | None = Field(default=None, ge=0, le=1)
+    uncertain: bool = False
+    hybrid_components: list[str] = Field(default_factory=list)
+    candidate_mask_path: str | None = None
+    visible_mask_path: str | None = None
+    full_mask_path: str | None = None
+    segmentation: dict = Field(default_factory=dict)
+    ownership_priority: int = 0
+    occludes: list[str] = Field(default_factory=list)
+    negative_points: list[list[float]] = Field(default_factory=list)
+    positive_points: list[list[float]] = Field(default_factory=list)
+    retry_history: list[dict] = Field(default_factory=list)
+    occluded_pixel_count: int = Field(default=0, ge=0)
+    visible_pixel_count: int = Field(default=0, ge=0)
+    ownership_pixel_count: int = Field(default=0, ge=0)

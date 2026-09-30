@@ -4,6 +4,7 @@ from typing import Self
 
 import yaml
 from app.detection_config import DetectionConfig
+from app.p1_config import P1Config
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -58,6 +59,7 @@ class OptionalStageConfig(Options):
 
 
 class PipelineConfig(Options):
+    p1: P1Config = Field(default_factory=P1Config)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     mock: bool = True
     max_retry: int = Field(default=1, ge=0, le=100)

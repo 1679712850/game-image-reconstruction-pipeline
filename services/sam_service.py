@@ -79,6 +79,23 @@ class SAMService:
                 self._predictor.reset_predictor()
         return objects
 
+    def predict_candidates(self, image, prompts):
+        """Local-refinement boundary; always return every SAM mask for CV ranking."""
+        self.load()
+        with self._torch.inference_mode():
+            try:
+                self._predictor.set_image(np.array(image.convert("RGB"), copy=True))
+                masks, scores, _ = self._predictor.predict(
+                    **prompts, multimask_output=True, return_logits=False, normalize_coords=True)
+                masks, scores = np.asarray(masks), np.asarray(scores).reshape(-1)
+                if masks.ndim == 2:
+                    masks = masks[None]
+                if masks.shape != (len(scores), image.height, image.width) or not scores.size or not np.isfinite(scores).all() or not np.isfinite(masks).all():
+                    raise ValueError("SAM 2 returned invalid local candidates")
+                return masks, scores
+            finally:
+                self._predictor.reset_predictor()
+
     def segment_local(self, image_path: str, detections: list[dict]) -> list[dict]:
         """Retry each weak candidate on a padded local crop and restore global masks."""
         if self.mock or not self.config.sam.local_retry:

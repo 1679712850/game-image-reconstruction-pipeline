@@ -14,10 +14,14 @@ from services.model_support import ModelUnavailableError
 
 def segment_records(
     source_path: str, records: list[dict], service: SAMService, root: Path,
-    *, local: bool = False, coverage_path: str | None = None, version: str = "",
+    *, local: bool = False, coverage_path: str | None = None, version: str = "", p1=None, attempt=0, neighbors=None,
 ) -> list[dict]:
     """Persist service masks before putting object records into graph state."""
     segment = service.segment_local if local else service.segment
+    if p1 is not None and p1.enabled:
+        from segmentation.local_refiner import LocalRefiner
+        refiner = LocalRefiner(service, p1)
+        segment = lambda path, items: refiner.segment(path, items, attempt, neighbors=records if neighbors is None else neighbors)
     try:
         outputs = segment(source_path, records)
     except ModelUnavailableError:
@@ -59,6 +63,7 @@ def segment_records(
                 raise ValueError("Coverage mask differs from segmentation size")
             mask[covered] = 0
         obj.mask_path = save_mask(mask, root / "masks" / f"{obj.id}{version}.png")
+        obj.candidate_mask_path = obj.mask_path
         obj.status = "segmented"
         obj.error = None
         objects.append(obj.model_dump(mode="json"))
@@ -71,6 +76,8 @@ def refine_records(records: list[dict], threshold: int) -> list[dict]:
     for record in records:
         obj = SceneObject.model_validate(record)
         if obj.mask_path:
+            # P1 already performs category-specific morphology at local inference.
+            # Retain the legacy threshold-only normalization for P0 and avoid closing twice.
             mask = refine_mask(read_mask(obj.mask_path), threshold=threshold)
             save_mask(mask, obj.mask_path)
         objects.append(obj.model_dump(mode="json"))

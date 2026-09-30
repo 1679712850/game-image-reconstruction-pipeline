@@ -299,6 +299,7 @@ class P0AdapterTests(unittest.TestCase):
             source = root/'input.png'
             Image.new('RGB', (40, 40)).save(source)
             config = PipelineConfig(scene_loop=SceneLoopConfig(enabled=False),
+                                    p1={'enabled': False},
                                     detection=settings(expand_categories=True, diagnostics={'enabled': False}))
             services = replace(ServiceBundle.create(), grounding=EffectDetector())
             state = build_graph(config, services).invoke({'source_path': str(source), 'output_dir': str(root/'out')})

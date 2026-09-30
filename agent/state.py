@@ -14,6 +14,7 @@ class SceneState(TypedDict, total=False):
     detections: list[dict]
     objects: list[dict]
     failed_objects: list[str]
+    retryable_objects: list[str]
     retry_count: int
     max_retry: int
     reconstruction_path: str
@@ -39,3 +40,10 @@ class SceneState(TypedDict, total=False):
     detection_runs: list[dict]
     total_retry_count: int
     all_detections: list[dict]
+    ownership: dict
+    terrain_layers: list[dict]
+    retry_history: list[dict]
+    missed_object_candidates: list[dict]
+    detection_coverage_review: dict
+    p1_thresholds: dict
+    p1_summary: dict
