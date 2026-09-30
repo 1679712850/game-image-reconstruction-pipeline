@@ -59,6 +59,10 @@ class DetectionTests(unittest.TestCase):
             self.assertEqual(result[0]['bbox'],{'x':2,'y':3,'w':6,'h':6})
             self.assertEqual(processor.call_args.kwargs['text'],'tree.')
             self.assertEqual(processor.post_process_grounded_object_detection.call_args.kwargs['target_sizes'],[(10,20)])
+            boxes.detach.return_value.cpu.return_value.tolist.return_value = []
+            scores.detach.return_value.cpu.return_value.tolist.return_value = []
+            processor.post_process_grounded_object_detection.return_value[0]['text_labels'] = ['']
+            self.assertEqual(service.detect(str(path), ['tree']), [])
 
 
 class SAMAdapterTests(unittest.TestCase):

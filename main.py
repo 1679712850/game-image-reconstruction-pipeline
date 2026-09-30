@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--real", dest="mock", action="store_false")
     parser.set_defaults(mock=None)
     parser.add_argument("--max-retry", type=int)
+    parser.add_argument("--max-rounds", type=int, help="Maximum bounded scene detection rounds")
+    parser.add_argument("--scene-reviewer", choices=("rules", "llm"), help="Scene continuation policy")
     parser.add_argument("--exercise-retry", action="store_true", help="Inject one low-confidence mock detection")
     parser.add_argument("--decompose-layers", action="store_true", help="Enable optional Qwen layer generation (mock or local weights only)")
     parser.add_argument("--edit-requests", type=Path, help="JSON list of object_id, crop-space mask_path and prompt; enables edit candidates")
@@ -42,6 +44,10 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
         data["mock"] = args.mock
     if args.max_retry is not None:
         data["max_retry"] = args.max_retry
+    if args.max_rounds is not None:
+        data["scene_loop"]["max_rounds"] = args.max_rounds
+    if args.scene_reviewer is not None:
+        data["scene_loop"]["reviewer"] = args.scene_reviewer
     if args.exercise_retry:
         data["exercise_retry"] = True
     if args.decompose_layers:
@@ -58,6 +64,7 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
         ("plan_layers", "Plan layers"), ("detect_instances", "Detect objects"),
         ("segment_instances", "Segment objects"), ("refine_masks", "Refine masks"),
         ("crop_objects", "Crop assets"), ("qa_objects", "QA"),
+        ("update_remaining", "Update remaining scene"), ("qa_scene", "Scene coverage review"),
         ("upscale_objects", "Upscale"), ("build_metadata", "Build metadata"),
         ("reconstruct_scene", "Reconstruct"), ("export", "Export"),
     ]
@@ -82,7 +89,7 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
         if args.device is not None:
             overrides["device"] = args.device
         models = models.model_copy(update=overrides)
-    services = ServiceBundle.create(mock=config.mock, models=models)
+    services = ServiceBundle.create(mock=config.mock, models=models, reviewer_backend=config.scene_loop.reviewer)
     graph = build_graph(config, services=services, progress=progress)
     initial: SceneState = {
         "source_path": str(args.input.expanduser().resolve()),
@@ -90,7 +97,7 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
         "max_retry": config.max_retry, "failed_objects": [],
         "edit_requests": edit_requests,
     }
-    result = graph.invoke(initial, config={"recursion_limit": 20 + 2 * config.max_retry})
+    result = graph.invoke(initial)
     report = {"completed": True, "visited_nodes": events, "state": result,
               "models": models.model_dump(mode="json") if models else None,
               "pipeline": config.model_dump(mode="json"),
@@ -102,6 +109,9 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
         json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8",
     )
     print(f"Done. Reached END. Objects: {len(result['objects'])}; retries: {result['retry_count']}")
+    if result.get("scene_qa"):
+        print(f"Scene rounds: {result['detection_round']}; accepted mask coverage: {result['scene_coverage']:.1%}; stop: {result['scene_stop_reason']}")
+        print(f"Scene QA: {result['scene_qa']['status']}; reviewer: {result['scene_qa']['backend']}; {result['scene_qa']['decision']['reason']}")
     if result["failed_objects"]:
         print(f"Manual review: {', '.join(result['failed_objects'])}")
     print(f"Scene: {result['scene_json']}")

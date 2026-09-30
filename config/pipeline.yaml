@@ -7,10 +7,20 @@ crop:
 qa:
   min_confidence: 0.35
   min_occupancy: 0.08
+  max_mask_outside_bbox: 0.35
 upscale:
   enabled: true
 reconstruction:
   enabled: true
+scene_loop:
+  enabled: true
+  max_rounds: 3
+  max_objects: 300
+  target_coverage: 0.85
+  min_coverage_gain: 0.002
+  no_progress_patience: 2
+  covered_box_threshold: 0.85
+  reviewer: rules
 # Optional stages; enable only with a complete local Diffusers model_path.
 layer_decomposition:
   enabled: false

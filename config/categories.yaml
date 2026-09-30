@@ -8,4 +8,4 @@ layers:
   - name: vegetation
     categories: [tree, bush]
   - name: decorations
-    categories: [decoration]
+    categories: [pillar, lantern, gate, stairs, fence, flag, rock_debris]

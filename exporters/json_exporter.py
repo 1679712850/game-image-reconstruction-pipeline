@@ -37,6 +37,12 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         unresolved_objects=state.get("failed_objects", []),
         reconstruction=relative_asset(preview, root) if preview else None,
         reconstruction_score=state.get("reconstruction_score") if preview else None,
+        coverage={"accepted": state.get("scene_coverage", 0.0),
+                  "candidate": state.get("scene_qa", {}).get("candidate_coverage", 0.0),
+                  "remaining_image": relative_asset(state.get("working_path"), root) if state.get("scene_history") else None,
+                  "mask": relative_asset(state.get("coverage_mask_path") or None, root),
+                  "definition": "Union of masks over nontransparent source pixels; not semantic recall"},
+        scene_qa={"rounds": state.get("scene_history", []), "stop_reason": state.get("scene_stop_reason", "")},
     )
 
 

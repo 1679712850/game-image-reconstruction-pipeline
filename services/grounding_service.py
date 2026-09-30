@@ -2,7 +2,9 @@
 from app.paths import read_rgba
 from app.models import ModelConfig
 from services.model_support import ModelUnavailableError, torch_runtime
-from services.detection_postprocess import postprocess_detections
+from services.detection_postprocess import postprocess_detections, canonical_prompt_label
+from cv.tiles import tile_windows
+from PIL import Image
 
 
 class GroundingService:
@@ -58,24 +60,67 @@ class GroundingService:
         self._processor, self._model = processor, model
 
     def _detect_real(self, image_path: str, categories: list[str]) -> list[dict]:
-        """Infer grounded boxes in source pixels using period-separated prompts."""
+        """Run grouped full-image and overlapping tile detection."""
+        return self.detect_round(image_path, categories, 1)[0]
+
+    def detect_round(self, image_path: str, categories: list[str], round_index: int) -> tuple[list[dict], dict]:
+        """Return global boxes plus per-window diagnostics; only late rounds relax thresholds."""
+        if self.mock:
+            found = self.detect(image_path, categories)
+            return found, {"backend": "mock", "kept": len(found)}
         if not categories:
-            return []
+            return [], {"kept": 0}
         image = read_rgba(image_path).convert("RGB")
         self.load()
-        prompt = ". ".join(categories) + "."
+        cfg = self.config.grounding
+        relaxed = round_index >= cfg.relax_from_round
+        box_threshold = min(cfg.box_threshold, cfg.relaxed_box_threshold) if relaxed else cfg.box_threshold
+        text_threshold = min(cfg.text_threshold, cfg.relaxed_text_threshold) if relaxed else cfg.text_threshold
+        full = (0, 0, image.width, image.height)
+        windows = tile_windows(image.width, image.height, cfg.tile_size, cfg.tile_overlap) if cfg.tiled else [full]
+        if cfg.include_full_image:
+            windows = list(dict.fromkeys([full, *windows]))
+        candidates, scans = [], []
+        groups = [categories[i:i + cfg.prompt_group_size] for i in range(0, len(categories), cfg.prompt_group_size)]
+        for window in windows:
+            for group in groups:
+                found = self._infer_image(image.crop(window), group, box_threshold, text_threshold)
+                scans.append({"window": list(window), "categories": group, "candidates": len(found)})
+                for item in found:
+                    box = item["bbox"]
+                    candidates.append({**item, "bbox": {**box, "x": box["x"] + window[0], "y": box["y"] + window[1]}})
+        result = postprocess_detections(
+            [[o['bbox']['x'], o['bbox']['y'], o['bbox']['x'] + o['bbox']['w'], o['bbox']['y'] + o['bbox']['h']] for o in candidates],
+            [o['confidence'] for o in candidates], [o['category'] for o in candidates], categories,
+            image.width, image.height, box_threshold, cfg.nms_iou, cfg.max_detections,
+        )
+        return result, {"backend": "grounding_dino_transformers", "box_threshold": box_threshold,
+                        "text_threshold": text_threshold, "scans": scans,
+                        "before_merge": len(candidates), "kept": len(result)}
+
+    def _infer_image(self, image: Image.Image, categories: list[str], box_threshold: float, text_threshold: float) -> list[dict]:
+        """Infer a single window, mapping explicit prompt phrases back to canonical categories."""
+        phrases = [self.config.grounding.prompts.get(c, c.replace('_', ' ')) for c in categories]
+        prompt = ". ".join(phrases) + "."
         with self._torch.inference_mode():
             inputs = self._processor(images=image, text=prompt, return_tensors="pt").to(self._device)
             outputs = self._model(**inputs)
             result = self._processor.post_process_grounded_object_detection(
                 outputs, input_ids=inputs["input_ids"],
-                threshold=self.config.grounding.box_threshold,
-                text_threshold=self.config.grounding.text_threshold,
+                threshold=box_threshold,
+                text_threshold=text_threshold,
                 target_sizes=[(image.height, image.width)],
             )[0]
-        return postprocess_detections(
-            result["boxes"].detach().cpu().tolist(), result["scores"].detach().cpu().tolist(),
-            list(result["text_labels"]), categories, image.width, image.height,
-            self.config.grounding.box_threshold, self.config.grounding.nms_iou,
+        boxes = result["boxes"].detach().cpu().tolist()
+        scores = result["scores"].detach().cpu().tolist()
+        # Transformers 5.17 tokenizer batch_decode([]) returns ['']; no boxes is still empty.
+        if not boxes and not scores:
+            return []
+        found = postprocess_detections(
+            boxes, scores,
+            [canonical_prompt_label(label, categories, phrases) for label in result["text_labels"]],
+            categories, image.width, image.height,
+            box_threshold, self.config.grounding.nms_iou,
             self.config.grounding.max_detections,
         )
+        return found

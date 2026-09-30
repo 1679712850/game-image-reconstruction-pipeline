@@ -36,6 +36,17 @@ def touches_edge(mask: NDArray, threshold: int = 8) -> bool:
     )))
 
 
+def mask_outside_bbox(mask: NDArray, bbox: dict[str, int], threshold: int = 8) -> float:
+    """Fraction of foreground pixels outside a detector box, independent of occupancy."""
+    active = as_mask(mask) > threshold
+    count = int(np.count_nonzero(active))
+    if not count:
+        return 0.0
+    x, y, w, h = (bbox[key] for key in ("x", "y", "w", "h"))
+    inside = int(np.count_nonzero(active[max(0, y):max(0, y+h), max(0, x):max(0, x+w)]))
+    return 1.0 - inside / count
+
+
 def reconstruction_similarity(source: Image.Image, preview: Image.Image) -> float:
     """Return 1 - normalized full-canvas RGBA MAE, including missing regions."""
     if source.size != preview.size:

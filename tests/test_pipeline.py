@@ -50,7 +50,9 @@ class PipelineTests(unittest.TestCase):
         initial = self.initial()
         state = build_graph(progress=visits.append).invoke(initial)
         self.assertEqual(visits[-1], "export")
-        self.assertEqual(len(visits), 12)
+        self.assertEqual(visits.count("qa_scene"), 3)
+        self.assertEqual(visits.count("update_remaining"), 3)
+        self.assertEqual(state["scene_stop_reason"], "max_rounds")
         self.assertEqual(initial, self.initial())  # Input state remains untouched.
         self.assertEqual(len(state["objects"]), 4)
         self.assertEqual(state["failed_objects"], [])
@@ -74,7 +76,7 @@ class PipelineTests(unittest.TestCase):
         visits = []
         state = build_graph(PipelineConfig(exercise_retry=True), progress=visits.append).invoke(self.initial())
         self.assertEqual(visits.count("retry_objects"), 1)
-        self.assertEqual(visits.count("qa_objects"), 2)
+        self.assertEqual(visits.count("qa_objects"), state["detection_round"] + 1)
         self.assertEqual(state["retry_count"], 1)
         self.assertEqual(state["failed_objects"], [])
         first = state["objects"][0]
@@ -95,7 +97,9 @@ class PipelineTests(unittest.TestCase):
         visits = []
         graph = build_graph(PipelineConfig(max_retry=2), services, progress=visits.append)
         state = graph.invoke(self.initial(), {"recursion_limit": 30})
-        self.assertEqual(visits.count("retry_objects"), 2)
+        self.assertEqual(visits.count("retry_objects"), 4)
+        self.assertEqual(state["detection_round"], 2)
+        self.assertEqual(state["scene_stop_reason"], "no_progress")
         self.assertEqual(len(state["failed_objects"]), 4)
         self.assertTrue(all(obj["asset_path"] is None for obj in state["objects"]))
         self.assertTrue(all(obj["status"] == "manual_review" for obj in state["objects"]))

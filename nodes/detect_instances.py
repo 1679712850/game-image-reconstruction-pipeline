@@ -2,31 +2,88 @@
 from collections import Counter
 from collections.abc import Callable
 import re
+import json
+from pathlib import Path
+
+from app.config import SceneLoopConfig
+from cv.mask import read_mask
+from services.detection_postprocess import iou
 
 from agent.state import SceneState
 from schemas.object import SceneObject
 from services.grounding_service import GroundingService
 
 
-def make_detect_instances(service: GroundingService, exercise_retry: bool = False) -> Callable[[SceneState], dict]:
+def make_detect_instances(service: GroundingService, exercise_retry: bool = False, loop: SceneLoopConfig | None = None) -> Callable[[SceneState], dict]:
     """Bind a detector and optionally inject one demonstrable mock failure."""
     def detect_instances(state: SceneState) -> dict:
         """Return schema-validated detections in source-image coordinates."""
         categories = list(dict.fromkeys(
             category for layer in state["layer_plan"] for category in layer["categories"]
         ))
-        raw = service.detect(state["source_path"], categories)
+        layers = [{**layer, "categories": list(layer["categories"])} for layer in state["layer_plan"]]
+        additional = [c for c in state.get("scene_next_categories", []) if c not in categories]
+        if additional:
+            other = next((layer for layer in layers if layer["name"] == "discovered"), None)
+            if other is None:
+                layers.append({"name": "discovered", "categories": additional, "order": len(layers)})
+            else:
+                other["categories"].extend(additional)
+        categories = list(dict.fromkeys([*state.get("scene_next_categories", []), *categories]))
+        round_index = state.get("detection_round", 0) + 1
+        path = state.get("working_path", state["source_path"])
+        if loop is not None:
+            raw, diagnostics = service.detect_round(path, categories, round_index)
+        else:
+            raw, diagnostics = service.detect(path, categories), {}
+        archive = state.get("archived_objects", [])
+        coverage = read_mask(state["coverage_mask_path"]) > 0 if state.get("coverage_mask_path") else None
         counts, detections = Counter(), []
+        used = {obj["id"] for obj in archive}
+        assigned = set()
+        dropped = 0
         for index, item in enumerate(raw):
+            box = item["bbox"]
+            x, y, w, h = (box[key] for key in ("x", "y", "w", "h"))
+            if coverage is not None and coverage[y:y+h, x:x+w].mean() >= loop.covered_box_threshold:
+                dropped += 1
+                continue
+            matches = [o for o in archive if o["category"] == item["category"] and iou(o["bbox"], box) > service.config.grounding.nms_iou]
+            if any(o["status"] == "pass" for o in matches):
+                dropped += 1
+                continue
+            old = max(matches, key=lambda o: iou(o["bbox"], box), default=None)
             slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", item["category"]).strip("_") or "object"
-            counts[slug] += 1
+            if old is not None:
+                object_id = old["id"]
+            else:
+                counts[slug] += 1
+                object_id = f"{slug}_{counts[slug]:03d}"
+                while object_id in used:
+                    counts[slug] += 1
+                    object_id = f"{slug}_{counts[slug]:03d}"
+                if loop is not None and len(used) >= loop.max_objects:
+                    dropped += 1
+                    continue
+            if object_id in assigned:
+                continue
+            used.add(object_id)
+            assigned.add(object_id)
             obj = SceneObject(
-                id=f"{slug}_{counts[slug]:03d}", category=item["category"],
+                id=object_id, category=item["category"],
                 confidence=0.1 if exercise_retry and index == 0 else item["confidence"],
                 bbox=item["bbox"],
             )
             if obj.bbox.x + obj.bbox.w > state["width"] or obj.bbox.y + obj.bbox.h > state["height"]:
                 raise ValueError(f"Detection bbox lies outside source: {obj.id}")
             detections.append(obj.model_dump(mode="json"))
-        return {"detections": detections}
+        diagnostics.update(round=round_index, categories=categories, removed_or_duplicate=dropped, selected=len(detections))
+        if loop is not None:
+            directory = Path(state["output_dir"]) / "debug" / f"round_{round_index:02d}"
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "detections.json").write_text(json.dumps({**diagnostics, "detections": detections}, ensure_ascii=False, indent=2), encoding="utf-8")
+        all_detections = {obj["id"]: obj for obj in state.get("all_detections", [])}
+        all_detections.update({obj["id"]: obj for obj in detections})
+        return {"detections": detections, "all_detections": list(all_detections.values()), "detection_round": round_index, "retry_count": 0,
+                "failed_objects": [], "detection_diagnostics": diagnostics, "layer_plan": layers}
     return detect_instances

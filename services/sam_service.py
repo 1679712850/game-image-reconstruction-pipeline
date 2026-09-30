@@ -78,3 +78,37 @@ class SAMService:
             finally:
                 self._predictor.reset_predictor()
         return objects
+
+    def segment_local(self, image_path: str, detections: list[dict]) -> list[dict]:
+        """Retry each weak candidate on a padded local crop and restore global masks."""
+        if self.mock or not self.config.sam.local_retry:
+            return self.segment(image_path, detections)
+        if not detections:
+            return []
+        source = read_rgba(image_path).convert("RGB")
+        self.load()
+        objects = []
+        padding = self.config.sam.local_padding
+        with self._torch.inference_mode():
+            for item in detections:
+                box = BBox.model_validate(item["bbox"])
+                x0, y0 = max(0, box.x-padding), max(0, box.y-padding)
+                x1, y1 = min(source.width, box.x+box.w+padding), min(source.height, box.y+box.h+padding)
+                if box.x+box.w > source.width or box.y+box.h > source.height:
+                    raise ValueError("SAM 2 local box lies outside source")
+                crop = np.array(source.crop((x0, y0, x1, y1)))
+                try:
+                    self._predictor.set_image(crop)
+                    prompt = np.array([box.x-x0, box.y-y0, box.x+box.w-x0, box.y+box.h-y0], dtype=np.float32)
+                    masks, scores, _ = self._predictor.predict(box=prompt, multimask_output=True, return_logits=False, normalize_coords=True)
+                    masks, scores = np.asarray(masks), np.asarray(scores).reshape(-1)
+                    if masks.ndim == 2:
+                        masks = masks[None]
+                    if masks.shape != (len(scores), y1-y0, x1-x0) or not scores.size or not np.isfinite(scores).all() or not np.isfinite(masks).all():
+                        raise ValueError("SAM 2 returned invalid local masks")
+                    mask = np.zeros((source.height, source.width), dtype=np.uint8)
+                    mask[y0:y1, x0:x1] = (masks[int(np.argmax(scores))] > 0).astype(np.uint8) * 255
+                    objects.append({**item, "mask": mask})
+                finally:
+                    self._predictor.reset_predictor()
+        return objects

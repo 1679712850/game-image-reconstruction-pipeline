@@ -1,5 +1,62 @@
 # 验证记录（2026-09-30）
 
+## 多轮残图检测与场景 QA（2026-09-30）
+
+新增默认场景循环：每轮 Grounding DINO 整图 + 768 px / 25% 重叠切片、
+细粒度分组提示词、原坐标 NMS、SAM 分割、对象 QA、局部 SAM 重试，
+然后按通过 QA 的 mask 置白残图，由规则或 LangChain 视觉审查决定继续。
+默认最多 3 轮，连续无进展和对象数量也受限；仅第三轮降低检测阈值。
+LLM 只返回结构化判断与类别建议，不能跳过预算或自由调用工具。
+
+### 自动测试和可选客户端
+
+`.venv/bin/python -m unittest discover -s tests -q`：**79 项测试通过**。
+新增测试覆盖 tile 边界覆盖、全局坐标与跨 tile NMS、分轮阈值、
+局部 SAM 坐标恢复、mask 并集、仅通过对象置白、透明源图分母、
+原图与资产 RGB 保留、LLM 继续/停止/错误、预算限制、checkpoint 恢复、
+唯一 ID、较差后续候选不会覆盖已有有效资产、越框 mask 比例。
+
+可选 `langchain-openai 1.6.6` / `openai 3.22.1` 已安装，`pip check` 无冲突。
+使用真实 ChatOpenAI 客户端 + `httpx.MockTransport` 验证两张图片输入、
+tool calling schema 和结构化返回值解析，没有向外部 API 发出请求。
+**没有配置线上视觉 LLM 的模型/密钥，因此不宣称真实 LLM 审查已验收。**
+显式 LLM 模式缺少配置时会在模型推理前失败；运行时 LLM 异常转人工复核。
+
+Mock CLI `output/iterative_mock/` 已完成 3 轮并到达 END，保留 4 个实例，
+强制重试 1 次，后续轮次不重复生成相同对象。`compileall` / `git diff --check` 通过。
+
+### 真实地图验证
+
+输入 `input/宗门废墟.png`，1536 × 1024；真实 DINO / SAM 2，离线 CPU。
+第一次完整验证产物 `output/iterative_ruins/`：
+
+| 轮次 | 累计候选对象 | 累计 QA pass | pass mask 覆盖率 | 全候选覆盖率 |
+|---|---:|---:|---:|---:|
+| 1 | 29 | 15 | 5.99% | 8.01% |
+| 2 | 46 | 23 | 10.26% | 13.10% |
+| 3 | 86 | 27 | 11.24% | 45.53% |
+
+流程正常到达 END，3 次局部重试；59 个候选仍标记 `manual_review`。
+在最大轮数停止，并没有宣称完整分解。86 个候选 PNG 逐一验证原图 RGB、
+mask alpha、尺寸、HD 纹理尺寸和 pivot/z-order；manifest 引用全部存在，
+ID 唯一，残图只在 accepted mask 并集内变白。
+验证明细为 `debug/validation.json`，标框图为 `debug/detected_boxes.png`。
+
+最终版本再次完整运行至 END：`output/iterative_ruins_final/`。
+仍为 86 个候选 PNG、27 个规则 QA pass、59 个待复核，accepted 覆盖率 11.24%，
+candidate 覆盖率 45.55%。逐项产物校验再次通过，结果存于该目录的
+`debug/validation.json`。本次保留了更好的历史候选，避免后轮退化结果覆盖有效裁剪。
+规则模式真实运行与可注入 LLM 的决策/解析测试分别验收，未混称线上 LLM 推理。
+
+对比此前整图单次运行的 4 个候选，新的扫描流程找到了更多候选与可用裁剪，
+但也有大范围误检、跨类别重叠和物体碎片。第三轮降低阈值新增大量待复核对象，
+所以候选覆盖率 45.53% **不能当成准确率或物体召回率**。通过规则 QA 也不是
+语义正确性的保证。后续仍需真实视觉 LLM/人工复核及目标场景的模型质量优化。
+
+真实运行还发现并修复了 Transformers 5.17 的空结果兼容问题：
+tokenizer 的 `batch_decode([])` 返回 `['']`。当 boxes 和 scores 都为空时，
+适配器现在返回空检测；非空结果仍严格校验数量一致，不截断错配数据。
+
 ## V1 框架验收
 
 **V1 真实 LangGraph 端到端验收已通过。** 依赖已安装到仓库 `.venv`，

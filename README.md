@@ -11,7 +11,8 @@ V1 的重点是**可运行且可逐步替换模型的框架**。Mock 不理解�
 
 已接入真实 Grounding DINO（Transformers）和官方 SAM 2.1，并在 CPU 上完成
 在线下载及离线推理验收。真实产物位于 `output/real_test/`；原 Mock 模式仍保留。
-真实模式使用配置类别而非 VLM，高清化仍使用 Lanczos。详细结果见
+初始类别来自配置；场景循环支持 LangChain 视觉 LLM 审查，默认使用明确标记的规则模式。
+高清化仍使用 Lanczos。详细结果见
 [VERIFICATION.md](VERIFICATION.md)。
 
 Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接口也已实现。
@@ -49,8 +50,8 @@ python -m unittest discover -s tests -v
 `--real` 启用 Grounding DINO + SAM 2；模型加载失败会明确报错，不会静默回退到 Mock。
 Mock 模式无需 API key、不发起模型请求、不下载模型权重。
 
-默认终端打印 12 个阶段；retry 另行标记。默认图有 13 个业务节点，
-开启两个 Qwen 节点后有 15 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
+默认终端打印 14 个阶段；检测循环会重复打印对应阶段，retry 另行标记。
+默认图有 15 个业务节点，开启两个 Qwen 节点后有 17 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
 `debug/run.json` 保存节点访问顺序及最终可序列化 State。
 
 ## Architecture
@@ -66,12 +67,14 @@ flowchart TD
     LOAD[Load Image]
     ANALYZE[Scene Analysis]
     PLAN[Layer Planning]
-    DETECT[Grounding DINO]
+    DETECT[Grounding DINO: Full Image + Overlapping Tiles]
     SEGMENT[SAM 2]
     REFINE[Mask Refinement]
     CROP[Tight Bounding Box Crop]
     QA[Object QA]
     RETRY[Retry]
+    REMAIN[Commit Assets + Whiten Accepted Mask Pixels]
+    SCENE_QA[Coverage + LLM Scene Review]
     UPSCALE[Upscale]
     META[Build Metadata]
     REBUILD[Reconstruct Scene]
@@ -85,10 +88,12 @@ flowchart TD
     SEGMENT --> REFINE
     REFINE --> CROP
     CROP --> QA
-    QA -->|PASS| UPSCALE
-    QA -->|FAIL| RETRY
+    QA -->|PASS or retry exhausted| REMAIN
+    QA -->|FAIL and retry budget remains| RETRY
     RETRY --> QA
-    QA -->|Retry limit / manual review| UPSCALE
+    REMAIN --> SCENE_QA
+    SCENE_QA -->|Continue within budgets| DETECT
+    SCENE_QA -->|Stop or budget exhausted| UPSCALE
     UPSCALE --> META
     META --> REBUILD
     REBUILD --> EXPORT
@@ -201,8 +206,9 @@ QA 首先检查空/异常 mask 和资产，再检查置信度与 occupancy。
 
 Mock retry 会重新生成失败对象的 mask 和 crop，再显式模拟通过，
 保留原始低置信度及说明，不伪造置信度提升。
-真实模式会对失败对象有限次重新分割，不会把真实 QA 失败模拟通过；change_prompt、expand_crop、
-merge_neighbor_tiles 的智能诊断与执行是后续 TODO。
+真实模式会对失败对象在带 padding 的局部图中重新 SAM 分割，然后恢复原图坐标；
+检测置信度保持不变，因此单纯局部分割不会把低置信候选强行通过。
+场景循环还会重新检测未移除区域；更复杂的逐对象重试诊断仍待实现。
 
 ## Checkpoint / Human-in-the-loop 接口
 
@@ -255,7 +261,7 @@ python-dotenv，没有 torch、transformers 或任何模型包。
 
 后续逐步实现：Qwen 权重配置与真实验收、图层语义/所有权映射、
 Qwen-VL / Real-ESRGAN 等适配器、遮挡补全和新轮廓重分割、CV+VLM QA、
-retry diagnosis、tile 合并、背景覆盖与所有权处理、持久化 saver、
+retry diagnosis、背景覆盖与所有权处理、持久化 saver、
 人工交互 UI、PSD 与 Godot 导出。
 
 ## Grounding DINO + SAM 2 真实模式
@@ -455,4 +461,72 @@ output/qwen_mock_demo/
 Layered 图层和 Image Edit 候选目前是可导出的附加产物，
 尚未用于细分检测、自动填补漏检区域或替换实例纹理。
 接入这两个接口本身不会解决复杂大图只检测到少量对象的问题；
-切片检测、分类提示与覆盖率检查仍是独立的后续任务。
+切片检测、分类提示与覆盖率检查由下述场景循环提供。
+
+## 多轮场景检查与残图检测
+
+默认启用 `scene_loop`，主流程固定，只有 `qa_scene` 决定是否再检测。
+每轮先扫描整图与重叠 tiles，再分组发送细粒度类别提示词。
+tile 内检测框加偏移转换为原图坐标，按类别做全局 NMS；已通过 QA 的
+对象还会在跨轮按 bbox 和 mask 覆盖比例去重。未通过 QA 的匹配候选
+沿用原 ID 更新，防止每轮产生一批相同实例。
+
+默认设置：768 px tiles、25% 重叠、包含整图、每组最多 10 类；
+增加 `pillar / lantern / gate / stairs / fence / flag / rock_debris`，
+`config/models.yaml` 的 `grounding.prompts` 将类别映射为 `stone pillar`、
+`stone lantern`、`ornate gate` 等英文短语。
+前两轮保持 0.30 / 0.25 阈值；第三轮才降低到 0.25 / 0.20。
+每轮最多 100 个候选，整次运行最多 300 个对象，默认最多 3 轮。
+
+`update_remaining` 只将 **QA pass 的 mask 像素**置为白色，不擦除整个 bbox，
+不修改输入图。下一轮 DINO 和 SAM 读取残图；RGB 资产始终从原图裁剪。
+前轮已移除像素从后轮 mask 中剔除，避免把白色区域作为资产的一部分。
+低置信、空 mask 或大量越出检测框的对象保留为 `manual_review`，不参与置白。
+
+QA 同时记录：候选 mask 并集覆盖率、通过 QA 的 mask 并集覆盖率、
+新增覆盖率、未覆盖网格区域、待复核对象数。分母是原图非透明像素数。
+**像素覆盖率不是物体召回率或语义准确率**：天空、雾、地面可能合理地保留，
+错误的大 mask 也可能制造高覆盖率。当前不宣称实现完整场景分解。
+
+规则模式根据覆盖率目标继续检测。LLM 模式每轮同时接收原图、残图与指标，
+返回结构化的继续/停止、原因、细化类别；这些类别用于下一轮检测。
+无论 LLM 返回什么，最大轮数、对象上限、连续无进展预算都会限制循环。
+连续两轮没有新通过对象或覆盖增量低于 0.2% 就停止。预算耗尽标记待人工复核。
+LLM 调用异常时保留已有产物并标记 `manual_review`，不静默假装 LLM 通过。
+
+```bash
+# 真实视觉模型 + 显式规则审查，本地缓存运行
+.venv/bin/python main.py --input 'input/宗门废墟.png' \
+  --output output/iterative_ruins --real --offline --device cpu \
+  --scene-reviewer rules --max-rounds 3
+
+# 配置 LLM 视觉接口后
+.venv/bin/python -m pip install -r requirements-llm.txt
+.venv/bin/python main.py --input 'input/宗门废墟.png' \
+  --output output/llm_ruins --real --offline --scene-reviewer llm
+```
+
+LLM 接入使用 `langchain-openai`，支持提供图像输入与 tool calling 的 OpenAI
+兼容视觉模型。复制 `.env.example` 为 `.env`，设置 `VLM_MODEL`、
+`VLM_BASE_URL`、`VLM_API_KEY`；也可通过 `config/models.yaml` 的
+`scene_reviewer` 配置模型、地址、超时和密钥环境变量名。
+密钥不写入 YAML 或运行记录。`--offline` 只控制 DINO/SAM 权重读取，
+**LLM 模式仍调用配置的接口并发送原图和残图**。Mock 模式总是使用规则审查。
+显式 `--scene-reviewer llm` 而配置缺失时，在昂贵视觉推理前明确报错。
+
+新增诊断输出：
+
+```text
+debug/round_01/detections.json   切片位置、类别、阈值、去重统计与检测框
+debug/round_01/remaining.png     本轮结束后的白色残图
+debug/round_01/coverage.png      已通过 QA 的 mask 并集
+debug/round_01/scene_qa.json     覆盖指标、决策来源、继续原因与停止原因
+debug/round_02/...              后续轮次
+```
+
+`scene.json.coverage` 包含最终覆盖率、残图和覆盖 mask 的相对路径，
+`scene.json.scene_qa` 保存各轮检查历史。`objects` 是所有轮次的累计对象，
+不是最后一轮的结果。资产重试或更新会生成带轮次/重试后缀的文件，
+消费者应读取 manifest 引用；目录可能保留此前候选文件。
+`retry_count` 在最终 state 中是各轮总重试次数，`total_retry_count` 同样保留累计值。
+将 `scene_loop.enabled: false` 可恢复单轮图；切片与提示词仍由 models 配置独立控制。

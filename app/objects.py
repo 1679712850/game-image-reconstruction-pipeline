@@ -1,5 +1,6 @@
 """Reusable object operations for the main pass and targeted retries."""
 from pathlib import Path
+import numpy as np
 
 from app.config import CropConfig
 from app.paths import read_rgba
@@ -12,9 +13,11 @@ from services.sam_service import SAMService
 
 def segment_records(
     source_path: str, records: list[dict], service: SAMService, root: Path,
+    *, local: bool = False, coverage_path: str | None = None, version: str = "",
 ) -> list[dict]:
     """Persist service masks before putting object records into graph state."""
-    outputs = service.segment(source_path, records)
+    outputs = service.segment_local(source_path, records) if local else service.segment(source_path, records)
+    covered = read_mask(coverage_path) > 0 if coverage_path else None
     if len(outputs) != len(records):
         raise ValueError("Segmentation must return one record per input detection")
     if {item["id"] for item in outputs} != {item["id"] for item in records}:
@@ -23,7 +26,12 @@ def segment_records(
     for result in outputs:
         data = {key: value for key, value in result.items() if key != "mask"}
         obj = SceneObject.model_validate(data)
-        obj.mask_path = save_mask(result["mask"], root / "masks" / f"{obj.id}.png")
+        mask = np.array(result["mask"], copy=True)
+        if covered is not None:
+            if covered.shape != mask.shape:
+                raise ValueError("Coverage mask differs from segmentation size")
+            mask[covered] = 0
+        obj.mask_path = save_mask(mask, root / "masks" / f"{obj.id}{version}.png")
         obj.status = "segmented"
         obj.error = None
         objects.append(obj.model_dump(mode="json"))
@@ -44,6 +52,7 @@ def refine_records(records: list[dict], threshold: int) -> list[dict]:
 
 def crop_records(
     source_path: str, records: list[dict], output_dir: Path, config: CropConfig,
+    *, version: str = "",
 ) -> list[dict]:
     """Crop object assets; empty or invalid masks remain reviewable records."""
     source = read_rgba(source_path)
@@ -64,7 +73,7 @@ def crop_records(
                 if box is None:
                     obj.error = "empty mask"
                 else:
-                    path = output_dir / "assets" / f"{obj.id}.png"
+                    path = output_dir / "assets" / f"{obj.id}{version}.png"
                     crop_rgba_by_mask(source, mask, box, path, threshold=config.alpha_threshold)
                     obj.crop_bbox = BBox(**box)
                     obj.asset_path = str(path.resolve())

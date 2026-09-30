@@ -48,3 +48,5 @@ class SceneManifest(BaseModel):
     reconstruction: str | None = None
     reconstruction_score: float | None = None
     reconstruction_score_definition: str = "1 - mean absolute RGBA error / 255 over the full canvas"
+    coverage: dict = Field(default_factory=dict)
+    scene_qa: dict = Field(default_factory=dict)

@@ -3,7 +3,7 @@
 device: auto
 cache_dir: ../.cache/models
 local_files_only: false
-categories: [tree, rock, mountain, building, bridge, bush, water, road]
+categories: [tree, rock, mountain, building, bridge, bush, water, road, pillar, lantern, gate, stairs, fence, flag, rock_debris]
 projection: isometric
 
 grounding:
@@ -13,6 +13,30 @@ grounding:
   text_threshold: 0.25
   nms_iou: 0.5
   max_detections: 100
+  tiled: true
+  tile_size: 768
+  tile_overlap: 0.25
+  include_full_image: true
+  prompt_group_size: 10
+  relax_from_round: 3
+  relaxed_box_threshold: 0.25
+  relaxed_text_threshold: 0.20
+  prompts:
+    tree: ancient tree
+    rock: mountain rock
+    mountain: mountain cliff
+    building: temple building
+    bridge: stone bridge
+    bush: shrub bush
+    water: pond water
+    road: stone road
+    pillar: stone pillar
+    lantern: stone lantern
+    gate: ornate gate
+    stairs: stone stairs
+    fence: stone fence railing
+    flag: red flag banner
+    rock_debris: broken rock debris
 
 sam:
   model_config_name: configs/sam2.1/sam2.1_hiera_t.yaml
@@ -22,6 +46,16 @@ sam:
   revision: main
   multimask_output: false
   mask_threshold: 0.0
+  local_retry: true
+  local_padding: 64
+
+scene_reviewer:
+  model: ""
+  base_url: null
+  api_key_env: VLM_API_KEY
+  timeout: 60
+  max_retries: 1
+  image_long_edge: 1536
 
 # Optional local-only Qwen adapters. Leave model_path null to keep them unloaded.
 qwen_layered:

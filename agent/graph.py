@@ -6,7 +6,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
 
-from agent.routers import route_after_qa
+from agent.routers import route_after_qa, route_after_scene_qa
 from agent.state import SceneState
 from app.config import PipelineConfig
 from nodes.analyze_scene import make_analyze_scene
@@ -25,6 +25,8 @@ from nodes.retry_objects import make_retry_objects
 from nodes.segment_instances import make_segment_instances
 from nodes.upscale_objects import make_upscale_objects
 from services.runtime import ServiceBundle
+from services.scene_review_service import SceneReviewService
+from nodes.scene_loop import make_update_remaining, make_qa_scene
 
 
 def _observed(
@@ -50,7 +52,12 @@ def build_graph(
 ) -> CompiledStateGraph:
     """Compile the real StateGraph; closures keep services out of checkpoints."""
     options = config or PipelineConfig()
-    adapters = services or ServiceBundle.create(mock=options.mock)
+    adapters = services or ServiceBundle.create(mock=options.mock, reviewer_backend=options.scene_loop.reviewer)
+    reviewer = adapters.reviewer or SceneReviewService(options.scene_loop.reviewer)
+    if options.scene_loop.enabled:
+        if not options.mock and reviewer.backend != options.scene_loop.reviewer:
+            raise ValueError("Injected scene reviewer backend differs from scene_loop.reviewer")
+        reviewer.validate_ready()
     taxonomy = categories_path or Path(__file__).resolve().parents[1] / "config" / "categories.yaml"
     if options.layer_decomposition.enabled:
         adapters.layered.validate_ready()
@@ -60,6 +67,10 @@ def build_graph(
     def initialize(state: SceneState) -> dict:
         updates = load_image(state)
         updates.update(retry_count=state.get("retry_count", 0), max_retry=state.get("max_retry", options.max_retry))
+        updates.update(detection_round=0, archived_objects=[], scene_history=[],
+                       scene_coverage=0.0, scene_no_progress=0, total_retry_count=0,
+                       all_detections=[], working_path=updates["source_path"], coverage_mask_path="",
+                       scene_next_categories=[], scene_continue=False, scene_stop_reason="")
         if updates["retry_count"] < 0 or updates["max_retry"] < 0:
             raise ValueError("Retry counters must be nonnegative")
         if state.get("edit_requests") and not options.object_completion.enabled:
@@ -70,7 +81,7 @@ def build_graph(
         "load_image": initialize,
         "analyze_scene": make_analyze_scene(adapters.vlm),
         "plan_layers": make_plan_layers(taxonomy),
-        "detect_instances": make_detect_instances(adapters.grounding, options.exercise_retry),
+        "detect_instances": make_detect_instances(adapters.grounding, options.exercise_retry, options.scene_loop if options.scene_loop.enabled else None),
         "segment_instances": make_segment_instances(adapters.sam),
         "refine_masks": make_refine_masks(options.crop.alpha_threshold),
         "crop_objects": make_crop_objects(options.crop),
@@ -91,6 +102,9 @@ def build_graph(
         nodes["decompose_layers"] = make_decompose_layers(adapters.layered)
     if options.object_completion.enabled:
         nodes["complete_objects"] = make_complete_objects(adapters.image_edit)
+    if options.scene_loop.enabled:
+        nodes["update_remaining"] = make_update_remaining(options)
+        nodes["qa_scene"] = make_qa_scene(options, reviewer)
     builder = StateGraph(SceneState)
     for name, node in nodes.items():
         builder.add_node(name, _observed(name, node, progress))
@@ -104,10 +118,14 @@ def build_graph(
     builder.add_edge(START, main_path[0])
     for source, target in zip(main_path, main_path[1:]):
         builder.add_edge(source, target)
+    after_scene = "complete_objects" if options.object_completion.enabled else "upscale_objects"
     builder.add_conditional_edges("qa_objects", route_after_qa, {
-        "retry": "retry_objects", "continue": "complete_objects" if options.object_completion.enabled else "upscale_objects",
+        "retry": "retry_objects", "continue": "update_remaining" if options.scene_loop.enabled else after_scene,
     })
     builder.add_edge("retry_objects", "qa_objects")
+    if options.scene_loop.enabled:
+        builder.add_edge("update_remaining", "qa_scene")
+        builder.add_conditional_edges("qa_scene", route_after_scene_qa, {"detect": "detect_instances", "continue": after_scene})
     if options.object_completion.enabled:
         builder.add_edge("complete_objects", "upscale_objects")
     for source, target in (
@@ -117,4 +135,5 @@ def build_graph(
         ("export", END),
     ):
         builder.add_edge(source, target)
-    return builder.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
+    return graph.with_config(recursion_limit=20 + options.scene_loop.max_rounds * (10 + 2 * options.max_retry))

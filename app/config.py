@@ -20,6 +20,26 @@ class CropConfig(Options):
 class QAConfig(Options):
     min_confidence: float = Field(default=0.35, ge=0, le=1)
     min_occupancy: float = Field(default=0.08, ge=0, le=1)
+    max_mask_outside_bbox: float = Field(default=0.35, ge=0, le=1)
+
+
+class SceneLoopConfig(Options):
+    """Hard budgets override agent decisions; coverage is diagnostic, not accuracy."""
+
+    enabled: bool = True
+    max_rounds: int = Field(default=3, ge=1, le=20)
+    max_objects: int = Field(default=300, ge=1, le=2000)
+    target_coverage: float = Field(default=0.85, gt=0, le=1)
+    min_coverage_gain: float = Field(default=0.002, ge=0, le=1)
+    no_progress_patience: int = Field(default=2, ge=1, le=10)
+    covered_box_threshold: float = Field(default=0.85, gt=0, le=1)
+    reviewer: str = "rules"
+
+    @model_validator(mode="after")
+    def validate_reviewer(self) -> Self:
+        if self.reviewer not in {"rules", "llm"}:
+            raise ValueError("scene_loop.reviewer must be rules or llm")
+        return self
 
 
 class UpscaleConfig(Options):
@@ -46,6 +66,7 @@ class PipelineConfig(Options):
     reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
     layer_decomposition: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
     object_completion: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
+    scene_loop: SceneLoopConfig = Field(default_factory=SceneLoopConfig)
 
     @model_validator(mode="after")
     def validate_retry_demo(self) -> Self:

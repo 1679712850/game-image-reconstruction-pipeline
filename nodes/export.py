@@ -14,11 +14,13 @@ def make_export(mock: bool, backends: dict[str, str] | None = None) -> Callable[
         scene_json = export_json(manifest, Path(state["output_dir"]) / "scene.json")
         assets = {scene_json}
         for obj in state.get("objects", []):
-            assets.update(obj[key] for key in ("asset_path", "hd_asset_path", "mask_path") if obj.get(key))
+                assets.update(obj[key] for key in ("asset_path", "hd_asset_path", "mask_path") if obj.get(key))
         assets.update(layer["asset_path"] for layer in state.get("decomposed_layers", []))
         for edit in state.get("object_edits", []):
             assets.update(edit[key] for key in ("asset_path", "mask_path", "source_asset_path"))
         if state.get("reconstruction_path"):
             assets.add(state["reconstruction_path"])
+        if state.get("scene_history"):
+            assets.update(state[key] for key in ("working_path", "coverage_mask_path") if state.get(key))
         return {"scene_json": scene_json, "exported_assets": sorted(assets)}
     return export

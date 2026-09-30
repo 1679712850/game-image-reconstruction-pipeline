@@ -18,9 +18,11 @@ def make_retry_objects(config: PipelineConfig, service: SAMService) -> Callable[
         failed = set(state.get("failed_objects", []))
         selected = [obj for obj in state["objects"] if obj["id"] in failed]
         root = Path(state["output_dir"])
-        repaired = segment_records(state["source_path"], selected, service, root)
+        version = f"_r{state.get('detection_round', 1):02d}_retry{count+1}"
+        repaired = segment_records(state.get("working_path", state["source_path"]), selected, service, root,
+                                   local=True, coverage_path=state.get("coverage_mask_path"), version=version)
         repaired = refine_records(repaired, config.crop.alpha_threshold)
-        repaired = crop_records(state["source_path"], repaired, root, config.crop)
+        repaired = crop_records(state["source_path"], repaired, root, config.crop, version=version)
         by_id = {}
         for obj in repaired:
             obj["mock_retry_resolved"] = config.mock and not obj["error"]

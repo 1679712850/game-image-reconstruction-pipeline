@@ -4,7 +4,7 @@ from collections.abc import Callable
 from agent.state import SceneState
 from app.config import PipelineConfig
 from cv.mask import read_mask
-from cv.metrics import bbox_area, occupancy, touches_edge
+from cv.metrics import bbox_area, occupancy, touches_edge, mask_outside_bbox
 from schemas.object import SceneObject
 from schemas.qa import ObjectQA
 
@@ -19,6 +19,9 @@ def assess_object(obj: SceneObject, config: PipelineConfig) -> ObjectQA:
         return ObjectQA(status="retry", reason="confidence below configured minimum", retry_strategy="change_prompt")
     if obj.metrics.get("occupancy", 0) < config.qa.min_occupancy:
         return ObjectQA(status="retry", reason="mask occupancy below configured minimum", retry_strategy="rerun_segmentation")
+    outside_fraction = mask_outside_bbox(read_mask(obj.mask_path), obj.bbox.model_dump(), config.crop.alpha_threshold)
+    if outside_fraction > config.qa.max_mask_outside_bbox:
+        return ObjectQA(status="retry", reason="mask extends substantially outside its detector box", retry_strategy="rerun_segmentation")
     return ObjectQA(status="pass", reason="confidence and mask occupancy passed")
 
 

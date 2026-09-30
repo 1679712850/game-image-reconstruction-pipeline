@@ -17,6 +17,24 @@ class GroundingConfig(Options):
     text_threshold: float = Field(default=0.25, ge=0, le=1)
     nms_iou: float = Field(default=0.5, ge=0, le=1)
     max_detections: int = Field(default=100, gt=0)
+    tiled: bool = True
+    tile_size: int = Field(default=768, ge=64)
+    tile_overlap: float = Field(default=0.25, ge=0, lt=0.75)
+    include_full_image: bool = True
+    prompt_group_size: int = Field(default=6, ge=1, le=32)
+    prompts: dict[str, str] = Field(default_factory=dict)
+    relax_from_round: int = Field(default=3, ge=2)
+    relaxed_box_threshold: float = Field(default=0.25, ge=0, le=1)
+    relaxed_text_threshold: float = Field(default=0.20, ge=0, le=1)
+
+    @field_validator("prompts")
+    @classmethod
+    def validate_prompts(cls, values: dict[str, str]) -> dict[str, str]:
+        """Each canonical category maps to one unambiguous English phrase."""
+        phrases = [v.strip().lower() for v in values.values()]
+        if len(set(phrases)) != len(phrases) or any(not v or any(c in v for c in ".\n\r") for v in phrases):
+            raise ValueError("Detection prompts must be unique nonempty phrases without periods/newlines")
+        return dict(zip(values, phrases))
 
 
 class SAMConfig(Options):
@@ -29,6 +47,19 @@ class SAMConfig(Options):
     revision: str = "main"
     multimask_output: bool = False
     mask_threshold: float = 0.0
+    local_retry: bool = True
+    local_padding: int = Field(default=64, ge=0)
+
+
+class SceneReviewerConfig(Options):
+    """OpenAI-compatible vision endpoint; credentials stay in environment only."""
+
+    model: str = ""
+    base_url: str | None = None
+    api_key_env: str = "VLM_API_KEY"
+    timeout: float = Field(default=60, gt=0, le=300)
+    max_retries: int = Field(default=1, ge=0, le=3)
+    image_long_edge: int = Field(default=1536, ge=256, le=4096)
 
 
 class QwenConfig(Options):
@@ -69,6 +100,7 @@ class ModelConfig(Options):
     sam: SAMConfig = Field(default_factory=SAMConfig)
     qwen_layered: QwenLayeredConfig = Field(default_factory=QwenLayeredConfig)
     qwen_image_edit: QwenConfig = Field(default_factory=QwenConfig)
+    scene_reviewer: SceneReviewerConfig = Field(default_factory=SceneReviewerConfig)
 
     @field_validator("categories")
     @classmethod

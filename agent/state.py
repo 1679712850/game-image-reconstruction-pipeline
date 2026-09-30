@@ -23,3 +23,18 @@ class SceneState(TypedDict, total=False):
     decomposed_layers: list[dict]
     edit_requests: list[dict]
     object_edits: list[dict]
+    working_path: str
+    detection_round: int
+    scene_coverage: float
+    scene_coverage_gain: float
+    scene_no_progress: int
+    scene_qa: dict
+    archived_objects: list[dict]
+    scene_history: list[dict]
+    coverage_mask_path: str
+    scene_next_categories: list[str]
+    scene_continue: bool
+    scene_stop_reason: str
+    detection_diagnostics: dict
+    total_retry_count: int
+    all_detections: list[dict]

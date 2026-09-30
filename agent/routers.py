@@ -7,3 +7,8 @@ def route_after_qa(state: SceneState) -> str:
     if state.get("failed_objects") and state.get("retry_count", 0) < state.get("max_retry", 1):
         return "retry"
     return "continue"
+
+
+def route_after_scene_qa(state: SceneState) -> str:
+    """Only the already-budgeted scene decision may start another round."""
+    return "detect" if state.get("scene_continue", False) else "continue"

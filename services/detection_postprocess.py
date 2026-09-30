@@ -13,6 +13,20 @@ def normalize_label(label: str, categories: list[str]) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def canonical_prompt_label(label: str, categories: list[str], phrases: list[str]) -> str:
+    """Handle partial noun labels without accepting ambiguous prompt fragments."""
+    exact = normalize_label(label, phrases)
+    if exact is not None:
+        return categories[phrases.index(exact)]
+    names = [c.replace('_', ' ') for c in categories]
+    canonical = normalize_label(label, names)
+    if canonical is not None:
+        return categories[names.index(canonical)]
+    words = set(re.findall(r"\w+", label.lower())) - {"a", "an", "the"}
+    matches = [c for c, p in zip(categories, phrases) if words and words <= set(p.split())]
+    return matches[0] if len(matches) == 1 else ""
+
+
 def iou(a: dict, b: dict) -> float:
     """Intersection over union of two integer xywh boxes."""
     x0, y0 = max(a['x'], b['x']), max(a['y'], b['y'])
