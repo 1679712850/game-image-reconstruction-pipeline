@@ -1,11 +1,145 @@
+# Layer membership. Canonical aliases live in taxonomy/aliases.py.
 layers:
-  - name: terrain
-    categories: [water, road]
-  - name: landforms
-    categories: [mountain, rock]
-  - name: structures
-    categories: [building, bridge]
-  - name: vegetation
-    categories: [tree, bush]
-  - name: decorations
-    categories: [pillar, lantern, gate, stairs, fence, flag, rock_debris]
+- name: terrain
+  categories:
+  - ground
+  - soil
+  - grass_ground
+  - stone_ground
+  - sand
+  - snow
+  - mud
+  - lava_ground
+  - cliff
+  - slope
+  - platform
+  - floating_island
+- name: vegetation
+  categories:
+  - tree
+  - dead_tree
+  - bamboo
+  - shrub
+  - bush
+  - grass
+  - flower
+  - vine
+  - mushroom
+  - lotus
+  - spirit_plant
+  - herb
+- name: rock
+  categories:
+  - mountain
+  - cliff_rock
+  - large_rock
+  - medium_rock
+  - small_rock
+  - rock_cluster
+  - floating_rock
+  - crystal_rock
+  - ore
+  - rock
+  - rock_debris
+- name: structure
+  categories:
+  - building
+  - house
+  - temple
+  - tower
+  - gate
+  - wall
+  - fence
+  - bridge
+  - stairs
+  - pillar
+  - stone_pillar
+  - wood_pillar
+  - railing
+  - roof
+  - door
+  - window
+  - arch
+  - ruin
+  - foundation
+- name: prop
+  categories:
+  - barrel
+  - box
+  - crate
+  - chest
+  - table
+  - chair
+  - bench
+  - cart
+  - sign
+  - lamp
+  - lantern
+  - stone_lantern
+  - torch
+  - pot
+  - jar
+  - basket
+  - rack
+  - weapon_rack
+  - well
+  - flag
+  - boundary_marker
+  - wood_stake
+  - statue
+  - mechanism
+  - roof_decoration
+- name: cultivation_prop
+  categories:
+  - alchemy_furnace
+  - forge
+  - formation
+  - formation_core
+  - formation_flag
+  - talisman
+  - spirit_stone
+  - spirit_crystal
+  - flying_sword
+  - magic_artifact
+  - altar
+  - totem
+  - teleport_array
+  - spirit_node
+  - incense_burner
+- name: graveyard
+  categories:
+  - grave
+  - gravestone
+  - tombstone
+  - coffin
+  - burial_mound
+  - bone
+  - skeleton
+  - memorial_tablet
+- name: water
+  categories:
+  - river
+  - lake
+  - pond
+  - waterfall
+  - stream
+  - swamp
+  - puddle
+  - water
+- name: road
+  categories:
+  - road
+  - stone_path
+  - dirt_path
+  - bridge_path
+  - stairs_path
+- name: fx_environment
+  categories:
+  - fog
+  - cloud
+  - smoke
+  - fire
+  - spirit_energy
+  - portal
+  - light_beam
+  - magic_effect

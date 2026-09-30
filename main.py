@@ -1,6 +1,7 @@
 """Command-line entry point for the scene reconstruction workflow."""
 import argparse
 import json
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -121,6 +122,7 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
 def main() -> int:
     """Return a nonzero exit code for unsupported real adapters or bad inputs."""
     load_dotenv(Path(__file__).resolve().parent / ".env")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
     try:
         run_pipeline(args)

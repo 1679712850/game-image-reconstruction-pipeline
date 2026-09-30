@@ -13,9 +13,11 @@ def assess_object(obj: SceneObject, config: PipelineConfig) -> ObjectQA:
     """Explain each failure and select a bounded repair strategy."""
     if obj.error or not obj.asset_path or not obj.mask_path:
         return ObjectQA(status="retry", reason=obj.error or "missing asset or mask", retry_strategy="rerun_segmentation")
+    if obj.review_required:
+        return ObjectQA(status="manual_review", reason="Protected low-confidence small object; inspect candidate lineage")
     if config.mock and obj.mock_retry_resolved:
         return ObjectQA(status="pass", reason="Mock retry simulation accepted this object; confidence is unchanged.")
-    if obj.confidence < config.qa.min_confidence:
+    if obj.confidence < (obj.confidence_threshold if obj.confidence_threshold is not None else config.qa.min_confidence):
         return ObjectQA(status="retry", reason="confidence below configured minimum", retry_strategy="change_prompt")
     if obj.metrics.get("occupancy", 0) < config.qa.min_occupancy:
         return ObjectQA(status="retry", reason="mask occupancy below configured minimum", retry_strategy="rerun_segmentation")
@@ -47,6 +49,8 @@ def make_qa_objects(config: PipelineConfig) -> Callable[[SceneState], dict]:
                 if exhausted:
                     qa.status = "manual_review"
                     qa.reason += "; retry budget exhausted"
+            elif qa.status == "manual_review":
+                failed.append(obj.id)
             obj.qa, obj.status = qa, qa.status
             objects.append(obj.model_dump(mode="json"))
         return {"objects": objects, "failed_objects": failed}

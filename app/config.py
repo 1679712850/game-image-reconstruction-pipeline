@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Self
 
 import yaml
+from app.detection_config import DetectionConfig
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -57,6 +58,7 @@ class OptionalStageConfig(Options):
 
 
 class PipelineConfig(Options):
+    detection: DetectionConfig = Field(default_factory=DetectionConfig)
     mock: bool = True
     max_retry: int = Field(default=1, ge=0, le=100)
     exercise_retry: bool = False

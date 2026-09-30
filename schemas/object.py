@@ -29,6 +29,23 @@ class SceneObject(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     category: str
+    group: str = "other"
+    subtype: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    source: str = "global"
+    tile_id: str | None = None
+    is_truncated: bool = False
+    truncated_edges: list[str] = Field(default_factory=list)
+    detection_method: str = "legacy"
+    parent_id: str | None = None
+    source_candidates: list[str] = Field(default_factory=list)
+    merged_from: list[str] = Field(default_factory=list)
+    merged: bool = False
+    observations: list[dict] = Field(default_factory=list)
+    redetected: bool = False
+    review_required: bool = False
+    review_reason: str | None = None
+    confidence_threshold: float | None = Field(default=None, ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
     bbox: BBox
     crop_bbox: BBox | None = None

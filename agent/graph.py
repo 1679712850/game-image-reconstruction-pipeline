@@ -69,7 +69,7 @@ def build_graph(
         updates.update(retry_count=state.get("retry_count", 0), max_retry=state.get("max_retry", options.max_retry))
         updates.update(detection_round=0, archived_objects=[], scene_history=[],
                        scene_coverage=0.0, scene_no_progress=0, total_retry_count=0,
-                       all_detections=[], working_path=updates["source_path"], coverage_mask_path="",
+                       all_detections=[], detection_runs=[], working_path=updates["source_path"], coverage_mask_path="",
                        scene_next_categories=[], scene_continue=False, scene_stop_reason="")
         if updates["retry_count"] < 0 or updates["max_retry"] < 0:
             raise ValueError("Retry counters must be nonnegative")
@@ -81,8 +81,8 @@ def build_graph(
         "load_image": initialize,
         "analyze_scene": make_analyze_scene(adapters.vlm),
         "plan_layers": make_plan_layers(taxonomy),
-        "detect_instances": make_detect_instances(adapters.grounding, options.exercise_retry, options.scene_loop if options.scene_loop.enabled else None),
-        "segment_instances": make_segment_instances(adapters.sam),
+        "detect_instances": make_detect_instances(adapters.grounding, options.exercise_retry, options.scene_loop if options.scene_loop.enabled else None, options.detection),
+        "segment_instances": make_segment_instances(adapters.sam, options.detection),
         "refine_masks": make_refine_masks(options.crop.alpha_threshold),
         "crop_objects": make_crop_objects(options.crop),
         "qa_objects": make_qa_objects(options),
@@ -96,7 +96,7 @@ def build_graph(
                 image_edit_enabled=options.object_completion.enabled,
             ),
             **({"upscale": "disabled"} if not options.upscale.enabled else {}),
-        }),
+        }, diagnostics_enabled=options.detection.diagnostics.enabled),
     }
     if options.layer_decomposition.enabled:
         nodes["decompose_layers"] = make_decompose_layers(adapters.layered)

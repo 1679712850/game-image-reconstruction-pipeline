@@ -36,5 +36,6 @@ class SceneState(TypedDict, total=False):
     scene_continue: bool
     scene_stop_reason: str
     detection_diagnostics: dict
+    detection_runs: list[dict]
     total_retry_count: int
     all_detections: list[dict]

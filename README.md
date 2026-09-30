@@ -19,6 +19,16 @@ Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接�
 本次仅进行无权重的代码接入：两个 `model_path` 均为空、节点默认关闭，
 未安装 Qwen 依赖、未下载 Qwen 权重、未进行 Qwen 神经网络推理。
 
+## P0 高召回检测（2026-09-30）
+
+默认 graph 已升级为整图 + 1024/1536 重叠切片、10 组细分类别、候选来源追踪、
+多特征融合、边缘复检、小目标复核保护，以及自动 `diagnostics/report.html`。
+新策略集中配置在 `config/pipeline.yaml:detection`，覆盖旧模型配置中的 Tile/NMS 策略。
+实体 PNG 继续使用原有 assets 路径；环境特效单独存储。
+
+实现边界、字段、配置优先级、诊断解释和真实小目标冒烟结果见
+[docs/DETECTION_P0.md](docs/DETECTION_P0.md)。测试验证机制正确性；真实召回率仍需标注集对照。
+
 ## 安装与运行
 
 推荐 Python 3.11+。仓库根目录就是设计中的 `scene_reconstructor/` 项目根，

@@ -20,7 +20,7 @@ def make_plan_layers(categories_path: Path) -> Callable[[SceneState], dict]:
         categories = list(dict.fromkeys(state["scene_analysis"]["categories"]))
         layers, assigned = [], set()
         for group in groups:
-            members = [category for category in categories if category in group["categories"]]
+            members = [category for category in categories if category in group["categories"] and category not in assigned]
             if members:
                 layers.append({"name": group["name"], "categories": members, "order": len(layers)})
                 assigned.update(members)

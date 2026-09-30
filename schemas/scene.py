@@ -43,6 +43,8 @@ class SceneManifest(BaseModel):
     decomposed_layers: list[LayerAsset] = Field(default_factory=list)
     object_edits: list[ObjectEditResult] = Field(default_factory=list)
     objects: list[ExportObject]
+    environment_effects: list[ExportObject] = Field(default_factory=list)
+    detection: dict = Field(default_factory=dict)
     retry_count: int
     unresolved_objects: list[str] = Field(default_factory=list)
     reconstruction: str | None = None

@@ -26,3 +26,38 @@ layer_decomposition:
   enabled: false
 object_completion:
   enabled: false
+
+# High-recall P0 detection. These settings supersede legacy grounding tiling/NMS
+# options for the LangGraph pipeline; model prompts/device still use models.yaml.
+detection:
+  global:
+    enabled: true
+  tiling:
+    enabled: true
+    tile_size: 1024
+    overlap: 0.25
+    min_tile_size: 64
+  multi_scale:
+    enabled: true
+    scales: [1024, 1536]
+  expand_categories: true
+  prompt_group_size: 6
+  confidence:
+    default: 0.4
+    large_object: 0.5
+    small_object: 0.25
+    candidate_floor: 0.1
+    small_area_ratio: 0.001
+    large_area_ratio: 0.05
+  dedup:
+    bbox_iou: 0.45
+    mask_iou: 0.5
+    overlap_ratio: 0.7
+    center_distance: 0.65
+    appearance_similarity: 0.8
+  truncation:
+    edge_threshold: 12
+    redetect_padding: 192
+    max_redetections: 100
+  diagnostics:
+    enabled: true

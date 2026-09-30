@@ -98,7 +98,45 @@ class GroundingService:
                         "text_threshold": text_threshold, "scans": scans,
                         "before_merge": len(candidates), "kept": len(result)}
 
-    def _infer_image(self, image: Image.Image, categories: list[str], box_threshold: float, text_threshold: float) -> list[dict]:
+    def detect_p0(self, image_path, categories, detection_config, round_index=1):
+        """Run the production high-recall path with explicit pipeline configuration."""
+        from detection.p0_pipeline import P0DetectionPipeline
+        from taxonomy.aliases import normalize_category
+        image = read_rgba(image_path).convert("RGB")
+        cfg = self.config.grounding
+        relaxed = round_index >= cfg.relax_from_round
+        text_threshold = min(cfg.text_threshold, cfg.relaxed_text_threshold) if relaxed else cfg.text_threshold
+        # Otherwise low-score boxes survive the box gate but get empty text labels.
+        text_threshold = min(text_threshold, detection_config.confidence.candidate_floor)
+        if self.mock:
+            # Stable source-space fixtures: overlapping crops observe the SAME objects.
+            fixtures = self.detect(image_path, categories)
+            def infer(crop, group, context):
+                wx, wy, wr, wb = context["window"]
+                found = []
+                for obj in fixtures:
+                    category = normalize_category(obj["category"], default=obj["category"])
+                    if category not in group:
+                        continue
+                    b = obj["bbox"]
+                    x, y = max(wx, b["x"]), max(wy, b["y"])
+                    r, bottom = min(wr, b["x"]+b["w"]), min(wb, b["y"]+b["h"])
+                    if r > x and bottom > y:
+                        found.append({"category": category, "confidence": obj["confidence"],
+                                      "bbox": {"x": x-wx, "y": y-wy, "w": r-x, "h": bottom-y}})
+                return found
+        else:
+            self.load()  # A broken model setup must fail explicitly before per-tile isolation.
+            def infer(crop, group, context):
+                # Grounding DINO consumes noun phrases, not VLM instructions. The shared
+                # context retains the full instruction for instruction-following adapters.
+                return self._infer_image(crop, group, detection_config.confidence.candidate_floor,
+                                         text_threshold, preserve_candidates=True)
+        records, stats = P0DetectionPipeline(detection_config).run(
+            image, categories, infer, method="mock" if self.mock else cfg.model_id, round_index=round_index)
+        return records, stats
+
+    def _infer_image(self, image: Image.Image, categories: list[str], box_threshold: float, text_threshold: float, *, preserve_candidates: bool = False) -> list[dict]:
         """Infer a single window, mapping explicit prompt phrases back to canonical categories."""
         phrases = [self.config.grounding.prompts.get(c, c.replace('_', ' ')) for c in categories]
         prompt = ". ".join(phrases) + "."
@@ -116,6 +154,14 @@ class GroundingService:
         # Transformers 5.17 tokenizer batch_decode([]) returns ['']; no boxes is still empty.
         if not boxes and not scores:
             return []
+        if preserve_candidates:
+            from taxonomy.aliases import normalize_category
+            labels = result["text_labels"]
+            if not len(boxes) == len(scores) == len(labels):
+                raise ValueError("Detector returned mismatched boxes/scores/labels")
+            return [{"category": normalize_category(label) or canonical_prompt_label(label, categories, phrases) or label,
+                     "raw_label": label, "confidence": score, "bbox": box, "bbox_format": "xyxy", "coordinate_space": "pixel"}
+                    for box, score, label in zip(boxes, scores, labels)]
         found = postprocess_detections(
             boxes, scores,
             [canonical_prompt_label(label, categories, phrases) for label in result["text_labels"]],

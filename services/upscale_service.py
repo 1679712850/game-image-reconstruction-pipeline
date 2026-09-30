@@ -35,8 +35,8 @@ class UpscaleService:
         image = read_rgba(source)
         size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
         result = image.resize(size, Image.Resampling.LANCZOS)
-        root = source.parent.parent if source.parent.name == "assets" else source.parent
-        target = root / "assets_hd" / f"{source.stem}@{scale:g}x.png"
+        root = source.parent.parent if source.parent.name in {"assets", "effects"} else source.parent
+        target = root / ("effects_hd" if source.parent.name == "effects" else "assets_hd") / f"{source.stem}@{scale:g}x.png"
         target.parent.mkdir(parents=True, exist_ok=True)
         result.save(target, "PNG")
         return str(target.resolve())
