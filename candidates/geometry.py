@@ -22,7 +22,7 @@ def source_placement(obj):
             'mask_position': [box['x'], box['y']], 'crop_bbox': dict(box), 'pivot': pivot}
 
 
-def normalize(path, original, placement, target, scene_size, *, aligned=False):
+def normalize(path, original, placement, target, scene_size, *, aligned=False, allow_outside_scene=False):
     with Image.open(path) as image:
         image = image.convert('RGBA')
     tight = image.getchannel('A').point(lambda v: 255 if v > 8 else 0).getbbox()
@@ -45,8 +45,9 @@ def normalize(path, original, placement, target, scene_size, *, aligned=False):
         pivot = ground_pivot(np.array(image.getchannel('A')))
         x, y = (round(placement['anchor'][0]-pivot['x']), round(placement['anchor'][1]-pivot['y']))
     # Clip only at the original scene boundary; never move the anchor to fit.
-    left, top = max(0, -x), max(0, -y)
-    right, bottom = min(image.width, scene_size[0]-x), min(image.height, scene_size[1]-y)
+    left, top = (0, 0) if allow_outside_scene else (max(0, -x), max(0, -y))
+    right, bottom = (image.width, image.height) if allow_outside_scene else (
+        min(image.width, scene_size[0]-x), min(image.height, scene_size[1]-y))
     if right <= left or bottom <= top:
         raise ValueError('generated placement outside scene')
     image = image.crop((left, top, right, bottom)); x += left; y += top
@@ -61,6 +62,11 @@ def normalize(path, original, placement, target, scene_size, *, aligned=False):
 def rebuild_mask(image_path, box, scene_size, target):
     with Image.open(image_path) as image:
         alpha = image.convert('RGBA').getchannel('A')
-    mask = Image.new('L', scene_size); mask.paste(alpha, (box['x'], box['y']))
+    mask = Image.new('L', scene_size)
+    x, y = box['x'], box['y']
+    left, top = max(0, -x), max(0, -y)
+    right, bottom = min(alpha.width, scene_size[0]-x), min(alpha.height, scene_size[1]-y)
+    if right > left and bottom > top:
+        mask.paste(alpha.crop((left, top, right, bottom)), (max(0, x), max(0, y)))
     target = Path(target); target.parent.mkdir(parents=True, exist_ok=True); mask.save(target)
     return str(target.resolve())

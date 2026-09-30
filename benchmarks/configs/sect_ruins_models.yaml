@@ -1,0 +1,11 @@
+device: cpu
+cache_dir: ../../.cache/models
+local_files_only: true
+categories: [tree, rock, building, stone_lantern, flag, tombstone]
+projection: isometric
+grounding:
+  model_id: IDEA-Research/grounding-dino-tiny
+sam:
+  model_config_name: configs/sam2.1/sam2.1_hiera_t.yaml
+  repo_id: facebook/sam2.1-hiera-tiny
+  filename: sam2.1_hiera_tiny.pt

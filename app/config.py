@@ -1,8 +1,9 @@
 """Validated configuration, separate from workflow state."""
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 import yaml
+import warnings
 from app.detection_config import DetectionConfig
 from app.p1_config import P1Config
 from app.resource_config import ResourcesConfig, CacheConfig, CandidateConfig
@@ -20,6 +21,17 @@ class CropConfig(Options):
     padding: int = Field(default=16, ge=0)
 
 
+class AmodalConfig(Options):
+    """Bounds for semantic completion canvases; masks remain model outputs."""
+    context_padding: float = Field(default=.30, ge=0, le=2)
+    severe_padding: float = Field(default=.60, ge=0, le=3)
+    minimum_padding: int = Field(default=32, ge=0)
+    max_canvas_edge: int = Field(default=4096, ge=64)
+    max_canvas_pixels: int = Field(default=16_777_216, ge=4096)
+    confidence_threshold: float = Field(default=.65, ge=0, le=1)
+    severe_candidates: int = Field(default=3, ge=2, le=4)
+
+
 class QAConfig(Options):
     min_confidence: float = Field(default=0.35, ge=0, le=1)
     min_occupancy: float = Field(default=0.08, ge=0, le=1)
@@ -31,7 +43,7 @@ class SceneLoopConfig(Options):
 
     enabled: bool = True
     max_rounds: int = Field(default=3, ge=1, le=20)
-    max_objects: int = Field(default=300, ge=1, le=2000)
+    max_objects: int | None = Field(default=300, ge=1, le=2000)
     target_coverage: float = Field(default=0.85, gt=0, le=1)
     min_coverage_gain: float = Field(default=0.002, ge=0, le=1)
     no_progress_patience: int = Field(default=2, ge=1, le=10)
@@ -46,11 +58,23 @@ class SceneLoopConfig(Options):
 
 
 class UpscaleConfig(Options):
-    enabled: bool = True
+    enabled: bool | Literal["auto"] = False
+    required: bool = False
+
+    @model_validator(mode="after")
+    def validate_required(self) -> Self:
+        if self.required and self.enabled is False:
+            raise ValueError("upscale.required requires upscale.enabled=true or auto")
+        return self
 
 
 class ReconstructionConfig(Options):
     enabled: bool = True
+
+
+class ExportConfig(Options):
+    memory_budget_mb: int = Field(default=2048, ge=64)
+    low_memory: bool = True
 
 
 class OptionalStageConfig(Options):
@@ -69,12 +93,32 @@ class PipelineConfig(Options):
     max_retry: int = Field(default=1, ge=0, le=100)
     exercise_retry: bool = False
     crop: CropConfig = Field(default_factory=CropConfig)
+    amodal: AmodalConfig = Field(default_factory=AmodalConfig)
     qa: QAConfig = Field(default_factory=QAConfig)
     upscale: UpscaleConfig = Field(default_factory=UpscaleConfig)
     reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
+    export: ExportConfig = Field(default_factory=ExportConfig)
     layer_decomposition: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
     object_completion: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
     scene_loop: SceneLoopConfig = Field(default_factory=SceneLoopConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def unwrap_pipeline(cls, value: object) -> object:
+        if isinstance(value, dict) and 'pipeline' in value:
+            values = dict(value)
+            nested = values.pop('pipeline')
+            if not isinstance(nested, dict):
+                raise ValueError('pipeline must be a mapping')
+            if values:
+                warnings.warn('Root options alongside pipeline are deprecated; nested pipeline values take precedence', DeprecationWarning, stacklevel=2)
+            for key, item in nested.items():
+                if isinstance(item, dict) and isinstance(values.get(key), dict):
+                    values[key] = {**values[key], **item}
+                else:
+                    values[key] = item
+            return values
+        return value
 
     @model_validator(mode="after")
     def validate_retry_demo(self) -> Self:

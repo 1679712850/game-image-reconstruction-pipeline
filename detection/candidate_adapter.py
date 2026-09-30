@@ -44,7 +44,9 @@ def observation_candidate(item, context, image, candidate_id, config, method, ca
         return None, {**base, "bbox": bbox, "reason": "category_unknown"}
     edges = truncated_edges(bbox, context["window"], image.size, config.truncation.edge_threshold)
     observation = {**base, "bbox": bbox, "window": context["window"],
-                   "prompt_group": context["group"], "is_truncated": bool(edges),
+                   "prompt_group": context["group"], "category_group": category_group(category),
+                   "model": method, "pass_id": context.get("pass_id"), "scale": context.get("scale"),
+                   "runtime": context.get("runtime"), "is_truncated": bool(edges),
                    "truncated_edges": edges, "parent_id": context.get("parent_id")}
     patch = np.asarray(image.crop(bbox).resize((24, 24)).convert("RGB"))
     hist = np.histogramdd(patch.reshape(-1, 3), bins=(4, 4, 4), range=((0, 256),)*3)[0].ravel()

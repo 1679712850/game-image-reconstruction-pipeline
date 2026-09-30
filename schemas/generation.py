@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.object import BBox
+from schemas.object import AssetBBox
 
 
 class LayerAsset(BaseModel):
@@ -29,7 +29,7 @@ class ObjectEditRequest(BaseModel):
 
 
 class ObjectEditResult(BaseModel):
-    """Candidate RGB edit with original alpha and geometry, awaiting review."""
+    """A completion record whose alpha is independently reconstructed."""
 
     model_config = ConfigDict(extra="forbid")
     object_id: str
@@ -37,8 +37,8 @@ class ObjectEditResult(BaseModel):
     mask_path: str
     asset_path: str
     prompt: str
-    crop_bbox: BBox
+    crop_bbox: AssetBBox
     logical_size: tuple[int, int]
     mock: bool
     status: Literal["mock_noop", "manual_review"]
-    alpha_policy: Literal["preserve_source"] = "preserve_source"
+    alpha_policy: Literal["resegmented", "visible_hint", "pending_segmentation"] = "pending_segmentation"

@@ -1,0 +1,59 @@
+{
+  "scene_id": "sect_ruins_courtyard_001",
+  "image": "../scenes/sect_ruins.png",
+  "roi": [
+    800,
+    290,
+    1090,
+    610
+  ],
+  "categories": [
+    "stone_lantern"
+  ],
+  "annotation_status": "draft",
+  "provenance": "Engineering-agent visual annotation from magnified original pixels, draft pending independent human review. Standing roofed stone lanterns only; broken roofless pillars are excluded. North visible mask is a hand-traced coarse polygon, not SAM/model output. Top-border cut lantern is ignored.",
+  "ignore_regions": [
+    [
+      920,
+      290,
+      972,
+      346
+    ]
+  ],
+  "objects": [
+    {
+      "id": "lantern_north",
+      "category": "stone_lantern",
+      "bbox": [
+        807,
+        298,
+        836,
+        370
+      ],
+      "group": "prop",
+      "mask": "masks/lantern_north.png"
+    },
+    {
+      "id": "lantern_small",
+      "category": "stone_lantern",
+      "bbox": [
+        845,
+        335,
+        875,
+        384
+      ],
+      "group": "prop"
+    },
+    {
+      "id": "lantern_east",
+      "category": "stone_lantern",
+      "bbox": [
+        1015,
+        486,
+        1067,
+        578
+      ],
+      "group": "prop"
+    }
+  ]
+}

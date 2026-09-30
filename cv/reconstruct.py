@@ -22,9 +22,13 @@ def reconstruct_scene(
         asset = read_rgba(path)
         if asset.size != (box["w"], box["h"]):
             raise ValueError(f"Asset dimensions do not match crop_bbox: {path}")
-        if box["x"] < 0 or box["y"] < 0 or box["x"] + box["w"] > width or box["y"] + box["h"] > height:
+        if not obj.get('reconstruction') and not obj.get('completion_required') and (box["x"] < 0 or box["y"] < 0 or box["x"] + box["w"] > width or box["y"] + box["h"] > height):
             raise ValueError(f"Crop lies outside the scene: {obj.get('id')}")
-        canvas.alpha_composite(asset, (box["x"], box["y"]))
+        x, y = box['x'], box['y']
+        left, top = max(0, -x), max(0, -y)
+        right, bottom = min(asset.width, width-x), min(asset.height, height-y)
+        if right > left and bottom > top:
+            canvas.alpha_composite(asset.crop((left, top, right, bottom)), (max(0, x), max(0, y)))
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(target, "PNG")

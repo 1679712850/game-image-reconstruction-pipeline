@@ -1,0 +1,7 @@
+iou_threshold: 0.5
+boundary_tolerance: 2
+thresholds:
+  recall_drop: 0.02
+  precision_drop: 0.03
+  runtime_increase: 0.20
+  duplicate_rate_increase: 0.02

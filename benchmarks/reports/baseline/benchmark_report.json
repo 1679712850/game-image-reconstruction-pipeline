@@ -1,0 +1,1598 @@
+{
+  "detection": {
+    "recall": 1.0,
+    "precision": 1.0,
+    "duplicate_rate": 0.0,
+    "fragmentation_rate": 0.0,
+    "miss_rate": 0.0,
+    "gt_count": 3,
+    "prediction_count": 3,
+    "true_positive_count": 3,
+    "false_positive_count": 0,
+    "duplicate_count": 0,
+    "fragmented_gt_count": 0,
+    "by_size": {
+      "small": {
+        "gt": 1,
+        "detected": 1,
+        "recall": 1.0
+      },
+      "medium": {
+        "gt": 2,
+        "detected": 2,
+        "recall": 1.0
+      },
+      "large": {
+        "gt": 0,
+        "detected": 0,
+        "recall": null
+      }
+    }
+  },
+  "mask_quality": {
+    "iou": 0.5858421480878763,
+    "dice": 0.7388404309902514,
+    "boundary_fscore": 0.8079800498753118,
+    "completeness": 0.6244579358196011,
+    "contamination": 0.09547738693467336
+  },
+  "matches": [
+    {
+      "gt_id": "lantern_north",
+      "prediction_id": "stone_lantern_004",
+      "bbox_iou": 0.6824712643678161
+    },
+    {
+      "gt_id": "lantern_small",
+      "prediction_id": "stone_lantern_018",
+      "bbox_iou": 0.5
+    },
+    {
+      "gt_id": "lantern_east",
+      "prediction_id": "stone_lantern_017",
+      "bbox_iou": 0.9344752041426011
+    }
+  ],
+  "missed": [],
+  "false_positives": [],
+  "duplicates": [],
+  "fragments": [],
+  "masks": [
+    {
+      "gt_id": "lantern_north",
+      "prediction_id": "stone_lantern_004",
+      "bbox_iou": 0.6824712643678161,
+      "iou": 0.5858421480878763,
+      "dice": 0.7388404309902514,
+      "boundary_fscore": 0.8079800498753118,
+      "completeness": 0.6244579358196011,
+      "contamination": 0.09547738693467336,
+      "prediction_mask_missing": false
+    }
+  ],
+  "semantic_regions": [],
+  "ignored_predictions": [
+    "stone_lantern_006",
+    "stone_lantern_030"
+  ],
+  "predictions": [
+    {
+      "id": "stone_lantern_004",
+      "category": "stone_lantern",
+      "group": "prop",
+      "subtype": "stone_lantern",
+      "aliases": [
+        "stone lantern"
+      ],
+      "source": "tile",
+      "tile_id": "s1024_tile_00_00",
+      "is_truncated": false,
+      "truncated_edges": [],
+      "detection_method": "IDEA-Research/grounding-dino-tiny",
+      "parent_id": null,
+      "source_candidates": [
+        "r01_s1024_tile_00_00_candidate_000567",
+        "r01_s1024_tile_00_00_candidate_000508",
+        "r01_global_candidate_000216",
+        "r01_s1536_tile_00_00_candidate_001118",
+        "r01_s1024_tile_00_01_candidate_000841",
+        "r01_global_candidate_000296",
+        "r01_s1536_tile_00_00_candidate_001198"
+      ],
+      "merged_from": [
+        "r01_s1024_tile_00_00_candidate_000567",
+        "r01_s1024_tile_00_00_candidate_000508",
+        "r01_global_candidate_000216",
+        "r01_s1536_tile_00_00_candidate_001118",
+        "r01_s1024_tile_00_01_candidate_000841",
+        "r01_global_candidate_000296",
+        "r01_s1536_tile_00_00_candidate_001198"
+      ],
+      "merged": true,
+      "observations": [
+        {
+          "id": "r01_s1024_tile_00_00_candidate_000567",
+          "category": "stone_lantern",
+          "confidence": 0.1974949836730957,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            809,
+            298,
+            834,
+            355
+          ],
+          "window": [
+            0,
+            0,
+            1024,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 4.510143416000119,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1024_tile_00_00_candidate_000508",
+          "category": "stone_lantern",
+          "confidence": 0.1920657455921173,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            803,
+            298,
+            837,
+            371
+          ],
+          "window": [
+            0,
+            0,
+            1024,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 4.510143416000119,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_global_candidate_000216",
+          "category": "stone_lantern",
+          "confidence": 0.186738982796669,
+          "source": "global",
+          "tile_id": null,
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            804,
+            298,
+            837,
+            370
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "global_discovery",
+          "scale": null,
+          "runtime": 4.310219582999935,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1536_tile_00_00_candidate_001118",
+          "category": "stone_lantern",
+          "confidence": 0.186738982796669,
+          "source": "tile",
+          "tile_id": "s1536_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            804,
+            298,
+            837,
+            370
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1536,
+          "runtime": 4.488220917000035,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1024_tile_00_01_candidate_000841",
+          "category": "stone_lantern",
+          "confidence": 0.17997491359710693,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_01",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            802,
+            298,
+            837,
+            371
+          ],
+          "window": [
+            512,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 2.205261208000138,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_global_candidate_000296",
+          "category": "stone_lantern",
+          "confidence": 0.17461103200912476,
+          "source": "global",
+          "tile_id": null,
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            809,
+            298,
+            834,
+            353
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "global_discovery",
+          "scale": null,
+          "runtime": 4.310219582999935,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1536_tile_00_00_candidate_001198",
+          "category": "stone_lantern",
+          "confidence": 0.17461103200912476,
+          "source": "tile",
+          "tile_id": "s1536_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            809,
+            298,
+            834,
+            353
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1536,
+          "runtime": 4.488220917000035,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        }
+      ],
+      "redetected": false,
+      "review_required": false,
+      "review_reason": null,
+      "confidence_threshold": 0.25,
+      "confidence": 0.2525020681321621,
+      "bbox": [
+        809,
+        298,
+        834,
+        355
+      ],
+      "crop_bbox": {
+        "x": 794,
+        "y": 283,
+        "w": 54,
+        "h": 88
+      },
+      "mask_path": "accepted_masks/stone_lantern_004.png",
+      "asset_path": "assets/stone_lantern_004.png",
+      "source_asset_path": "assets/stone_lantern_004.png",
+      "source_mask_path": "masks/stone_lantern_004.png",
+      "source_crop_bbox": {
+        "x": 794,
+        "y": 283,
+        "w": 54,
+        "h": 88
+      },
+      "accepted_asset": "assets/stone_lantern_004.png",
+      "accepted_candidate_id": "original",
+      "asset_mask_path": "accepted_masks/stone_lantern_004.png",
+      "placement": {
+        "bbox_original": {
+          "x": 809,
+          "y": 298,
+          "w": 25,
+          "h": 57
+        },
+        "crop_bbox_original": {
+          "x": 794,
+          "y": 283,
+          "w": 54,
+          "h": 88
+        },
+        "center": [
+          821.0,
+          327.0
+        ],
+        "anchor": [
+          820.5,
+          354.5
+        ],
+        "scale": 1.0,
+        "rotation": 0,
+        "z_order": 354.5,
+        "depth": 354.5,
+        "mask_position": [
+          794,
+          283
+        ],
+        "crop_bbox": {
+          "x": 794,
+          "y": 283,
+          "w": 54,
+          "h": 88
+        },
+        "pivot": {
+          "x": 26.5,
+          "y": 71.5
+        }
+      },
+      "provenance": {
+        "final_source": "segmentation",
+        "original_asset": "assets/stone_lantern_004.png",
+        "accepted_asset": "assets/stone_lantern_004.png",
+        "qa_score": 0.8,
+        "qa_status": "ACCEPT",
+        "retry_count": 0,
+        "needs_manual_review": false
+      },
+      "needs_manual_review": false,
+      "hd_asset_path": null,
+      "pivot": {
+        "x": 26.5,
+        "y": 71.5
+      },
+      "z_order": 354.5,
+      "status": "pass",
+      "logical_size": [
+        54,
+        88
+      ],
+      "texture_size": [
+        54,
+        88
+      ],
+      "texture_scale": 1.0,
+      "qa": {
+        "status": "pass",
+        "reason": "confidence and mask occupancy passed",
+        "failure_types": [],
+        "retry_strategy": "none"
+      },
+      "metrics": {
+        "occupancy": 0.1675084175084175,
+        "bbox_area": 4752,
+        "touches_edge": false,
+        "segmentation_score": 0.8380435700194594,
+        "score": 0.6749126316128331,
+        "sam_confidence": 0.2525020681321621,
+        "bbox_coverage": 0.5585964912280702,
+        "detection_alignment": 1.0,
+        "edge_consistency": 0.994413407821229,
+        "background_leak": 0.0,
+        "overlap_penalty": 0.0,
+        "mask_area": 796,
+        "quality_score": 0.6749126316128331,
+        "mask_bbox_ratio": 0.5585964912280702,
+        "fragment_count": 1,
+        "alpha_integrity": true
+      },
+      "error": null,
+      "mock_retry_resolved": false,
+      "element_type": "instance",
+      "layer_group": "small_object",
+      "requires_individual_export": true,
+      "requires_inpainting": false,
+      "classification_reason": "bounded entity semantics; area_ratio=0.00091; repeats=52",
+      "classification_confidence": null,
+      "uncertain": false,
+      "hybrid_components": [],
+      "candidate_mask_path": "masks/stone_lantern_004.png",
+      "visible_mask_path": "masks/stone_lantern_004_visible.png",
+      "full_mask_path": "accepted_masks/stone_lantern_004.png",
+      "amodal_mask_path": null,
+      "expanded_crop_path": null,
+      "edit_mask_path": null,
+      "bbox_visible": null,
+      "bbox_full": null,
+      "reconstruction": {},
+      "hd_qa": {
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "base_asset_status": "ready",
+      "enhancement_status": "disabled",
+      "enhancement": {
+        "requested": false,
+        "required": false,
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "review": {
+        "required": false,
+        "reason": "confidence and mask occupancy passed"
+      },
+      "geometry": {
+        "visible_bbox": {
+          "x": 809,
+          "y": 298,
+          "w": 25,
+          "h": 57
+        },
+        "visible_mask": "masks/stone_lantern_004_visible.png",
+        "full_asset_bbox": {
+          "x": 794,
+          "y": 283,
+          "w": 54,
+          "h": 88
+        },
+        "full_asset_mask": null,
+        "full_asset_canvas": [
+          54,
+          88
+        ]
+      },
+      "accepted_visible_mask_path": "accepted_masks/stone_lantern_004_visible.png",
+      "reconstructed_mask_path": null,
+      "original_crop_path": null,
+      "asset_library_eligible": true,
+      "occlusion_ratio": 0.0,
+      "occlusion_directions": [],
+      "completion_required": false,
+      "reconstruction_confidence": 0.0,
+      "completion_qa": {},
+      "segmentation": {
+        "backend": "local_sam2",
+        "attempt": 0,
+        "windows": [
+          {
+            "window": [
+              752,
+              241,
+              891,
+              412
+            ],
+            "scale": 4,
+            "positive_points": [
+              [
+                821.5,
+                326.5
+              ]
+            ],
+            "negative_points": [
+              [
+                859.5,
+                355.5
+              ],
+              [
+                765.0,
+                289.5
+              ],
+              [
+                807,
+                326.5
+              ],
+              [
+                836,
+                326.5
+              ],
+              [
+                821.5,
+                296
+              ],
+              [
+                821.5,
+                357
+              ]
+            ],
+            "candidates": [
+              {
+                "score": 0.7940518152168251,
+                "sam_confidence": 0.846234917640686,
+                "bbox_coverage": 0.5894736842105263,
+                "detection_alignment": 0.9747606614447345,
+                "edge_consistency": 0.6937531742001015,
+                "background_leak": 0.025239338555265448,
+                "overlap_penalty": 0.0,
+                "mask_area": 13788
+              },
+              {
+                "score": 0.8079302874076589,
+                "sam_confidence": 0.8804939985275269,
+                "bbox_coverage": 0.5335087719298246,
+                "detection_alignment": 1.0,
+                "edge_consistency": 0.6252139189960069,
+                "background_leak": 0.0,
+                "overlap_penalty": 0.0,
+                "mask_area": 12164
+              },
+              {
+                "score": 0.8380435700194594,
+                "sam_confidence": 0.9046640992164612,
+                "bbox_coverage": 0.5563157894736842,
+                "detection_alignment": 1.0,
+                "edge_consistency": 0.7776289350301406,
+                "background_leak": 0.0,
+                "overlap_penalty": 0.0,
+                "mask_area": 12684
+              }
+            ],
+            "selected": 2
+          }
+        ],
+        "score": 0.8380435700194594
+      },
+      "ownership_priority": 60,
+      "occludes": [],
+      "negative_points": [],
+      "positive_points": [],
+      "retry_history": [],
+      "occluded_pixel_count": 0,
+      "visible_pixel_count": 796,
+      "ownership_pixel_count": 796,
+      "asset": "assets/stone_lantern_004.png",
+      "hd_asset": null
+    },
+    {
+      "id": "stone_lantern_018",
+      "category": "stone_lantern",
+      "group": "prop",
+      "subtype": "stone_lantern",
+      "aliases": [
+        "stone lantern"
+      ],
+      "source": "tile",
+      "tile_id": "s1024_tile_00_00",
+      "is_truncated": false,
+      "truncated_edges": [],
+      "detection_method": "IDEA-Research/grounding-dino-tiny",
+      "parent_id": null,
+      "source_candidates": [
+        "r01_s1024_tile_00_00_candidate_000520",
+        "r01_global_candidate_000244",
+        "r01_s1536_tile_00_00_candidate_001146",
+        "r01_s1024_tile_00_01_candidate_000859"
+      ],
+      "merged_from": [
+        "r01_s1024_tile_00_00_candidate_000520",
+        "r01_global_candidate_000244",
+        "r01_s1536_tile_00_00_candidate_001146",
+        "r01_s1024_tile_00_01_candidate_000859"
+      ],
+      "merged": true,
+      "observations": [
+        {
+          "id": "r01_s1024_tile_00_00_candidate_000520",
+          "category": "stone_lantern",
+          "confidence": 0.1727159470319748,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            849,
+            338,
+            870,
+            373
+          ],
+          "window": [
+            0,
+            0,
+            1024,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 4.510143416000119,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_global_candidate_000244",
+          "category": "stone_lantern",
+          "confidence": 0.16094431281089783,
+          "source": "global",
+          "tile_id": null,
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            849,
+            338,
+            870,
+            374
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "global_discovery",
+          "scale": null,
+          "runtime": 4.310219582999935,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1536_tile_00_00_candidate_001146",
+          "category": "stone_lantern",
+          "confidence": 0.16094431281089783,
+          "source": "tile",
+          "tile_id": "s1536_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            849,
+            338,
+            870,
+            374
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1536,
+          "runtime": 4.488220917000035,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1024_tile_00_01_candidate_000859",
+          "category": "stone_lantern",
+          "confidence": 0.13053308427333832,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_01",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            845,
+            337,
+            876,
+            383
+          ],
+          "window": [
+            512,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 2.205261208000138,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        }
+      ],
+      "redetected": false,
+      "review_required": true,
+      "review_reason": "low_confidence_small_object",
+      "confidence_threshold": 0.25,
+      "confidence": 0.21643755659461023,
+      "bbox": [
+        849,
+        338,
+        870,
+        373
+      ],
+      "crop_bbox": {
+        "x": 835,
+        "y": 321,
+        "w": 50,
+        "h": 64
+      },
+      "mask_path": "accepted_masks/stone_lantern_018.png",
+      "asset_path": "assets/stone_lantern_018.png",
+      "source_asset_path": "assets/stone_lantern_018.png",
+      "source_mask_path": "masks/stone_lantern_018.png",
+      "source_crop_bbox": {
+        "x": 835,
+        "y": 321,
+        "w": 50,
+        "h": 64
+      },
+      "accepted_asset": "assets/stone_lantern_018.png",
+      "accepted_candidate_id": "original",
+      "asset_mask_path": "accepted_masks/stone_lantern_018.png",
+      "placement": {
+        "bbox_original": {
+          "x": 849,
+          "y": 338,
+          "w": 21,
+          "h": 35
+        },
+        "crop_bbox_original": {
+          "x": 835,
+          "y": 321,
+          "w": 50,
+          "h": 64
+        },
+        "center": [
+          860.0,
+          353.0
+        ],
+        "anchor": [
+          859.0,
+          368.5
+        ],
+        "scale": 1.0,
+        "rotation": 0,
+        "z_order": 368.5,
+        "depth": 368.5,
+        "mask_position": [
+          835,
+          321
+        ],
+        "crop_bbox": {
+          "x": 835,
+          "y": 321,
+          "w": 50,
+          "h": 64
+        },
+        "pivot": {
+          "x": 24.0,
+          "y": 47.5
+        }
+      },
+      "provenance": {
+        "final_source": "segmentation",
+        "original_asset": "assets/stone_lantern_018.png",
+        "accepted_asset": "assets/stone_lantern_018.png",
+        "qa_score": 0.4,
+        "qa_status": "RETRY",
+        "retry_count": 0,
+        "needs_manual_review": true
+      },
+      "needs_manual_review": true,
+      "hd_asset_path": null,
+      "pivot": {
+        "x": 24.0,
+        "y": 47.5
+      },
+      "z_order": 368.5,
+      "status": "manual_review",
+      "logical_size": [
+        50,
+        64
+      ],
+      "texture_size": [
+        50,
+        64
+      ],
+      "texture_scale": 1.0,
+      "qa": {
+        "status": "manual_review",
+        "reason": "Protected low-confidence small object; inspect candidate lineage",
+        "failure_types": [],
+        "retry_strategy": "none"
+      },
+      "metrics": {
+        "occupancy": 0.128125,
+        "bbox_area": 3200,
+        "touches_edge": false,
+        "segmentation_score": 0.823294077592202,
+        "score": 0.6601014314707256,
+        "sam_confidence": 0.21643755659461023,
+        "bbox_coverage": 0.5564625850340136,
+        "detection_alignment": 0.9975609756097561,
+        "edge_consistency": 0.9767441860465116,
+        "background_leak": 0.0024390243902439024,
+        "overlap_penalty": 0.0,
+        "mask_area": 410,
+        "quality_score": 0.6601014314707256,
+        "mask_bbox_ratio": 0.5578231292517006,
+        "fragment_count": 1,
+        "alpha_integrity": true
+      },
+      "error": null,
+      "mock_retry_resolved": false,
+      "element_type": "instance",
+      "layer_group": "small_object",
+      "requires_individual_export": true,
+      "requires_inpainting": false,
+      "classification_reason": "bounded entity semantics; area_ratio=0.00047; repeats=52",
+      "classification_confidence": null,
+      "uncertain": false,
+      "hybrid_components": [],
+      "candidate_mask_path": "masks/stone_lantern_018.png",
+      "visible_mask_path": "masks/stone_lantern_018_visible.png",
+      "full_mask_path": "accepted_masks/stone_lantern_018.png",
+      "amodal_mask_path": null,
+      "expanded_crop_path": null,
+      "edit_mask_path": null,
+      "bbox_visible": null,
+      "bbox_full": null,
+      "reconstruction": {},
+      "hd_qa": {
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "base_asset_status": "needs_review",
+      "enhancement_status": "disabled",
+      "enhancement": {
+        "requested": false,
+        "required": false,
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "review": {
+        "required": true,
+        "reason": "Protected low-confidence small object; inspect candidate lineage"
+      },
+      "geometry": {
+        "visible_bbox": {
+          "x": 849,
+          "y": 338,
+          "w": 21,
+          "h": 35
+        },
+        "visible_mask": "masks/stone_lantern_018_visible.png",
+        "full_asset_bbox": {
+          "x": 835,
+          "y": 321,
+          "w": 50,
+          "h": 64
+        },
+        "full_asset_mask": null,
+        "full_asset_canvas": [
+          50,
+          64
+        ]
+      },
+      "accepted_visible_mask_path": "accepted_masks/stone_lantern_018_visible.png",
+      "reconstructed_mask_path": null,
+      "original_crop_path": null,
+      "asset_library_eligible": false,
+      "occlusion_ratio": 0.0,
+      "occlusion_directions": [],
+      "completion_required": false,
+      "reconstruction_confidence": 0.0,
+      "completion_qa": {},
+      "segmentation": {
+        "backend": "local_sam2",
+        "attempt": 0,
+        "windows": [
+          {
+            "window": [
+              814,
+              303,
+              905,
+              408
+            ],
+            "scale": 4,
+            "positive_points": [
+              [
+                859.5,
+                355.5
+              ]
+            ],
+            "negative_points": [
+              [
+                821.5,
+                327.5
+              ],
+              [
+                821.5,
+                326.5
+              ],
+              [
+                847,
+                355.5
+              ],
+              [
+                872,
+                355.5
+              ],
+              [
+                859.5,
+                336
+              ],
+              [
+                859.5,
+                375
+              ]
+            ],
+            "candidates": [
+              {
+                "score": 0.5863986782202344,
+                "sam_confidence": 0.7669301629066467,
+                "bbox_coverage": 0.7527210884353741,
+                "detection_alignment": 0.7770365168539326,
+                "edge_consistency": 0.4152191894127378,
+                "background_leak": 0.22296348314606743,
+                "overlap_penalty": 0.16666666666666666,
+                "mask_area": 11392
+              },
+              {
+                "score": 0.8020703681757783,
+                "sam_confidence": 0.8511956334114075,
+                "bbox_coverage": 0.5501700680272109,
+                "detection_alignment": 0.9969183359013868,
+                "edge_consistency": 0.656043956043956,
+                "background_leak": 0.0030816640986132513,
+                "overlap_penalty": 0.0,
+                "mask_area": 6490
+              },
+              {
+                "score": 0.823294077592202,
+                "sam_confidence": 0.8699644804000854,
+                "bbox_coverage": 0.5581632653061225,
+                "detection_alignment": 0.9974168059565416,
+                "edge_consistency": 0.7581699346405228,
+                "background_leak": 0.002583194043458441,
+                "overlap_penalty": 0.0,
+                "mask_area": 6581
+              }
+            ],
+            "selected": 2
+          }
+        ],
+        "score": 0.823294077592202
+      },
+      "ownership_priority": 60,
+      "occludes": [],
+      "negative_points": [],
+      "positive_points": [],
+      "retry_history": [],
+      "occluded_pixel_count": 0,
+      "visible_pixel_count": 410,
+      "ownership_pixel_count": 410,
+      "asset": "assets/stone_lantern_018.png",
+      "hd_asset": null
+    },
+    {
+      "id": "stone_lantern_017",
+      "category": "stone_lantern",
+      "group": "prop",
+      "subtype": "stone_lantern",
+      "aliases": [
+        "stone lantern"
+      ],
+      "source": "global",
+      "tile_id": null,
+      "is_truncated": false,
+      "truncated_edges": [],
+      "detection_method": "IDEA-Research/grounding-dino-tiny",
+      "parent_id": null,
+      "source_candidates": [
+        "r01_global_candidate_000229",
+        "r01_s1536_tile_00_00_candidate_001131",
+        "r01_global_candidate_000278",
+        "r01_s1536_tile_00_00_candidate_001180",
+        "r01_s1024_tile_00_01_candidate_000850"
+      ],
+      "merged_from": [
+        "r01_global_candidate_000229",
+        "r01_s1536_tile_00_00_candidate_001131",
+        "r01_global_candidate_000278",
+        "r01_s1536_tile_00_00_candidate_001180",
+        "r01_s1024_tile_00_01_candidate_000850"
+      ],
+      "merged": true,
+      "observations": [
+        {
+          "id": "r01_global_candidate_000229",
+          "category": "stone_lantern",
+          "confidence": 0.17274613678455353,
+          "source": "global",
+          "tile_id": null,
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            1013,
+            485,
+            1066,
+            578
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "global_discovery",
+          "scale": null,
+          "runtime": 4.310219582999935,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1536_tile_00_00_candidate_001131",
+          "category": "stone_lantern",
+          "confidence": 0.17274613678455353,
+          "source": "tile",
+          "tile_id": "s1536_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            1013,
+            485,
+            1066,
+            578
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1536,
+          "runtime": 4.488220917000035,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_global_candidate_000278",
+          "category": "stone_lantern",
+          "confidence": 0.11239667236804962,
+          "source": "global",
+          "tile_id": null,
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            1005,
+            484,
+            1088,
+            584
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "global_discovery",
+          "scale": null,
+          "runtime": 4.310219582999935,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1536_tile_00_00_candidate_001180",
+          "category": "stone_lantern",
+          "confidence": 0.11239667236804962,
+          "source": "tile",
+          "tile_id": "s1536_tile_00_00",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            1005,
+            484,
+            1088,
+            584
+          ],
+          "window": [
+            0,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1536,
+          "runtime": 4.488220917000035,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        },
+        {
+          "id": "r01_s1024_tile_00_01_candidate_000850",
+          "category": "stone_lantern",
+          "confidence": 0.10783706605434418,
+          "source": "tile",
+          "tile_id": "s1024_tile_00_01",
+          "detection_method": "IDEA-Research/grounding-dino-tiny",
+          "raw_label": "stone lantern",
+          "bbox": [
+            999,
+            484,
+            1088,
+            585
+          ],
+          "window": [
+            512,
+            0,
+            1536,
+            1024
+          ],
+          "prompt_group": "small_props",
+          "category_group": "prop",
+          "model": "IDEA-Research/grounding-dino-tiny",
+          "pass_id": "regional_tiled",
+          "scale": 1024,
+          "runtime": 2.205261208000138,
+          "is_truncated": false,
+          "truncated_edges": [],
+          "parent_id": null
+        }
+      ],
+      "redetected": false,
+      "review_required": true,
+      "review_reason": "low_confidence_small_object",
+      "confidence_threshold": 0.4,
+      "confidence": 0.18892169669270514,
+      "bbox": [
+        1013,
+        485,
+        1066,
+        578
+      ],
+      "crop_bbox": {
+        "x": 1002,
+        "y": 470,
+        "w": 75,
+        "h": 123
+      },
+      "mask_path": "accepted_masks/stone_lantern_017.png",
+      "asset_path": "assets/stone_lantern_017.png",
+      "source_asset_path": "assets/stone_lantern_017.png",
+      "source_mask_path": "masks/stone_lantern_017.png",
+      "source_crop_bbox": {
+        "x": 1002,
+        "y": 470,
+        "w": 75,
+        "h": 123
+      },
+      "accepted_asset": "assets/stone_lantern_017.png",
+      "accepted_candidate_id": "original",
+      "asset_mask_path": "accepted_masks/stone_lantern_017.png",
+      "placement": {
+        "bbox_original": {
+          "x": 1013,
+          "y": 485,
+          "w": 53,
+          "h": 93
+        },
+        "crop_bbox_original": {
+          "x": 1002,
+          "y": 470,
+          "w": 75,
+          "h": 123
+        },
+        "center": [
+          1039.5,
+          531.5
+        ],
+        "anchor": [
+          1039.6666666666667,
+          576.5
+        ],
+        "scale": 1.0,
+        "rotation": 0,
+        "z_order": 576.5,
+        "depth": 576.5,
+        "mask_position": [
+          1002,
+          470
+        ],
+        "crop_bbox": {
+          "x": 1002,
+          "y": 470,
+          "w": 75,
+          "h": 123
+        },
+        "pivot": {
+          "x": 37.666666666666664,
+          "y": 106.5
+        }
+      },
+      "provenance": {
+        "final_source": "segmentation",
+        "original_asset": "assets/stone_lantern_017.png",
+        "accepted_asset": "assets/stone_lantern_017.png",
+        "qa_score": 0.4,
+        "qa_status": "RETRY",
+        "retry_count": 0,
+        "needs_manual_review": true
+      },
+      "needs_manual_review": true,
+      "hd_asset_path": null,
+      "pivot": {
+        "x": 37.666666666666664,
+        "y": 106.5
+      },
+      "z_order": 576.5,
+      "status": "manual_review",
+      "logical_size": [
+        75,
+        123
+      ],
+      "texture_size": [
+        75,
+        123
+      ],
+      "texture_scale": 1.0,
+      "qa": {
+        "status": "manual_review",
+        "reason": "Protected low-confidence small object; inspect candidate lineage",
+        "failure_types": [],
+        "retry_strategy": "none"
+      },
+      "metrics": {
+        "occupancy": 0.18612466124661248,
+        "bbox_area": 9225,
+        "touches_edge": false,
+        "segmentation_score": 0.7809082790097112,
+        "score": 0.6421660684018502,
+        "sam_confidence": 0.18892169669270514,
+        "bbox_coverage": 0.3483465205924123,
+        "detection_alignment": 1.0,
+        "edge_consistency": 0.9111374407582938,
+        "background_leak": 0.0,
+        "overlap_penalty": 0.0,
+        "mask_area": 1717,
+        "quality_score": 0.6421660684018502,
+        "mask_bbox_ratio": 0.3483465205924123,
+        "fragment_count": 4,
+        "alpha_integrity": true
+      },
+      "error": null,
+      "mock_retry_resolved": false,
+      "element_type": "instance",
+      "layer_group": "small_object",
+      "requires_individual_export": true,
+      "requires_inpainting": false,
+      "classification_reason": "bounded entity semantics; area_ratio=0.00313; repeats=52",
+      "classification_confidence": null,
+      "uncertain": false,
+      "hybrid_components": [],
+      "candidate_mask_path": "masks/stone_lantern_017.png",
+      "visible_mask_path": "masks/stone_lantern_017_visible.png",
+      "full_mask_path": "accepted_masks/stone_lantern_017.png",
+      "amodal_mask_path": null,
+      "expanded_crop_path": null,
+      "edit_mask_path": null,
+      "bbox_visible": null,
+      "bbox_full": null,
+      "reconstruction": {},
+      "hd_qa": {
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "base_asset_status": "needs_review",
+      "enhancement_status": "disabled",
+      "enhancement": {
+        "requested": false,
+        "required": false,
+        "status": "disabled",
+        "reason": "disabled_by_config"
+      },
+      "review": {
+        "required": true,
+        "reason": "Protected low-confidence small object; inspect candidate lineage"
+      },
+      "geometry": {
+        "visible_bbox": {
+          "x": 1013,
+          "y": 485,
+          "w": 53,
+          "h": 93
+        },
+        "visible_mask": "masks/stone_lantern_017_visible.png",
+        "full_asset_bbox": {
+          "x": 1002,
+          "y": 470,
+          "w": 75,
+          "h": 123
+        },
+        "full_asset_mask": null,
+        "full_asset_canvas": [
+          75,
+          123
+        ]
+      },
+      "accepted_visible_mask_path": "accepted_masks/stone_lantern_017_visible.png",
+      "reconstructed_mask_path": null,
+      "original_crop_path": null,
+      "asset_library_eligible": false,
+      "occlusion_ratio": 0.0,
+      "occlusion_directions": [],
+      "completion_required": false,
+      "reconstruction_confidence": 0.0,
+      "completion_qa": {},
+      "segmentation": {
+        "backend": "local_sam2",
+        "attempt": 0,
+        "windows": [
+          {
+            "window": [
+              957,
+              429,
+              1122,
+              634
+            ],
+            "scale": 4,
+            "positive_points": [
+              [
+                1039.5,
+                531.5
+              ]
+            ],
+            "negative_points": [
+              [
+                1011,
+                531.5
+              ],
+              [
+                1068,
+                531.5
+              ],
+              [
+                1039.5,
+                483
+              ],
+              [
+                1039.5,
+                580
+              ]
+            ],
+            "candidates": [
+              {
+                "score": 0.717673014855067,
+                "sam_confidence": 0.8062459230422974,
+                "bbox_coverage": 0.4657004463379996,
+                "detection_alignment": 0.9848492974364474,
+                "edge_consistency": 0.560880829015544,
+                "background_leak": 0.015150702563552505,
+                "overlap_penalty": 0.25,
+                "mask_area": 37292
+              },
+              {
+                "score": 0.7511264113808065,
+                "sam_confidence": 0.8309661149978638,
+                "bbox_coverage": 0.2838811117873808,
+                "detection_alignment": 1.0,
+                "edge_consistency": 0.6604290278411684,
+                "background_leak": 0.0,
+                "overlap_penalty": 0.0,
+                "mask_area": 22388
+              },
+              {
+                "score": 0.7809082790097112,
+                "sam_confidence": 0.8653585314750671,
+                "bbox_coverage": 0.3498934875228241,
+                "detection_alignment": 0.9999637615510056,
+                "edge_consistency": 0.4759782070331847,
+                "background_leak": 3.623844899438304e-05,
+                "overlap_penalty": 0.0,
+                "mask_area": 27595
+              }
+            ],
+            "selected": 2
+          }
+        ],
+        "score": 0.7809082790097112
+      },
+      "ownership_priority": 60,
+      "occludes": [],
+      "negative_points": [],
+      "positive_points": [],
+      "retry_history": [],
+      "occluded_pixel_count": 0,
+      "visible_pixel_count": 1717,
+      "ownership_pixel_count": 1717,
+      "asset": "assets/stone_lantern_017.png",
+      "hd_asset": null
+    }
+  ],
+  "poor_masks": [],
+  "scene_id": "sect_ruins_courtyard_001",
+  "annotation_status": "draft",
+  "annotation_digest": "06ff71411bcef50f9f6ae726d79064df004fdfe8e0173f55b44cec746e196628",
+  "roi": [
+    800,
+    290,
+    1090,
+    610
+  ],
+  "image_digest": "59d1522d56fab95e2fcc79c707eb57c44ca196f2f5a0632bdb373b588e2c4dc1",
+  "evaluation_scope": "Exhaustive for listed categories within ROI; other categories are unscored",
+  "inventory_kind": "production_detection_inventory",
+  "resource_failures": [],
+  "roi_completion": {
+    "semantic_coverage": 0.7933317016731933,
+    "unassigned_ratio": 0.20666829832680667,
+    "residual_pixel_ratio": 0.034609736561053754,
+    "instance_pixel_ratio": 0.7933317016731933,
+    "background_pixel_ratio": 0.0,
+    "definition": "QA-passed source-visible pixels inside ROI, excluding ignore regions. Residual is a subset of unassigned, not additive. Not GT pixel correctness."
+  },
+  "scan_cost": {
+    "calls": 19,
+    "global_passes": 1,
+    "tile_passes": 1,
+    "retry_calls": 3,
+    "by_source": {
+      "global": 4,
+      "tile": 12,
+      "redetection": 3
+    },
+    "max_total_inference_calls": 100,
+    "max_retry_calls": 3
+  },
+  "scan_groups": [
+    {
+      "inference_calls": 19,
+      "by_group": {
+        "small_props": 4,
+        "structure": 4,
+        "terrain": 6,
+        "vegetation": 5
+      }
+    }
+  ],
+  "budget_exhausted": false,
+  "mock": false,
+  "completion": {
+    "status": "partial",
+    "scene": {
+      "semantic_coverage": 0.4228903452555339,
+      "predicted_semantic_coverage": 0.5117270151774089,
+      "unassigned_ratio": 0.5771096547444661,
+      "unassigned_pixel_ratio": 0.5771096547444661,
+      "residual_pixel_ratio": 0.4882729848225911,
+      "semantic_pixel_ratio": 0.4228903452555339,
+      "background_pixel_ratio": 0.0,
+      "instance_pixel_ratio": 0.4228903452555339
+    },
+    "objects": {
+      "detected": 122,
+      "evaluated_assets": 122,
+      "accepted": 31,
+      "asset_ready": 31,
+      "needs_review": 87,
+      "rejected": 4,
+      "asset_ready_ratio": 0.2540983606557377,
+      "review_ratio": 0.7131147540983607,
+      "failed_ratio": 0.03278688524590164,
+      "delivery_review": 91
+    },
+    "quality": {
+      "duplicate_rate": null,
+      "fragmentation_rate": null,
+      "mean_mask_iou": null,
+      "candidate_dedup_ratio": 0.585419734904271
+    },
+    "reconstruction": {
+      "similarity": 1.0
+    },
+    "definitions": {
+      "semantic_coverage": "Union of QA-passed source-visible instance/terrain masks over nontransparent source pixels; predicted quality, not GT recall.",
+      "predicted_semantic_coverage": "All assigned source masks including review candidates; excludes residual.",
+      "unassigned_ratio": "Pixels without QA-passed semantics, including residual. Not additive with residual.",
+      "background_pixel_ratio": "QA-passed visible terrain pixels; excludes residual and generated completion.",
+      "asset_ready": "Persisted base cutout and segmentation, QA pass, no unresolved content/boundary review; optional HD excluded.",
+      "quality": "GT recall, precision, final duplicate/fragmentation/mask quality are unavailable until Benchmark evaluation.",
+      "reconstruction": "Pixel fidelity only; residual may produce 1.0 with low semantic coverage."
+    }
+  },
+  "truncated": false,
+  "objects_before_limit": 122,
+  "objects_after_limit": 122,
+  "performance": {
+    "runtime": 216.9093029499054,
+    "peak_ram_mb": 2079.390625,
+    "peak_vram_mb": null
+  },
+  "config": {
+    "iou_threshold": 0.5,
+    "fragment_containment": 0.8,
+    "fragment_min_area": 0.05,
+    "small_area_ratio": 0.001,
+    "large_area_ratio": 0.05,
+    "boundary_tolerance": 2,
+    "poor_mask_iou": 0.5,
+    "thresholds": {
+      "recall_drop": 0.02,
+      "precision_drop": 0.03,
+      "runtime_increase": 0.2,
+      "duplicate_rate_increase": 0.02
+    }
+  },
+  "production_manifest": "/Users/honghuiqian/develop/game_image_reconstruction_pipeline/benchmarks/reports/sect_ruins_baseline/pipeline/scene.json",
+  "metric_definitions": {
+    "matching": "Confidence-ordered category-aware one-to-one IoU matching within ROI; duplicate predictions also lower precision.",
+    "duplicates": "Unmatched predictions overlapping an already matched GT at IoU threshold / predictions.",
+    "fragmentation": "GT instances containing at least two distinct nonoverlapping partial boxes / instance GT; heuristic, not amodal GT.",
+    "size": "BBox area / original scene area; no resizing-dependent thresholds.",
+    "mask_quality": "Visible-mask metrics conditional on a matched, mask-annotated GT; missing predicted masks score zero. Unmatched GT reported as misses.",
+    "semantic_coverage": "QA-passed visible pixel union; GT semantic-region scores are separate and unavailable without mask GT."
+  }
+}

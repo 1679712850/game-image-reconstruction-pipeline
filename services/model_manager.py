@@ -62,13 +62,13 @@ class ModelManager:
     def release_cache(self):
         gc.collect()
         torch = sys.modules.get('torch')
-        if torch is not None and torch.cuda.is_available():
+        if torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available():
             torch.cuda.empty_cache()
             try:
                 torch.cuda.ipc_collect()
             except (RuntimeError, AttributeError):
                 pass
-        elif torch is not None and hasattr(torch, 'mps') and torch.backends.mps.is_available():
+        elif torch is not None and hasattr(torch, 'mps') and hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             torch.mps.empty_cache()
 
     def unload(self, name, *, offload=False):
@@ -127,7 +127,7 @@ class ModelManager:
         options = service.config
         requested = options.device
         torch = sys.modules.get('torch')
-        gpu = requested in {'cuda', 'mps'} or requested == 'auto' and torch is not None and torch.cuda.is_available()
+        gpu = requested in {'cuda', 'mps'} or requested == 'auto' and torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available()
         selected = requested if requested != 'auto' else ('cuda' if gpu else 'cpu')
         # Device discovery is lazy, only on a cache miss that needs the model.
         if requested == 'auto' and torch is None:

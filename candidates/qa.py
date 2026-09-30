@@ -30,7 +30,9 @@ def evaluate(candidate, original, obj, reviewer, config, *, force_review=False):
     if reviewer is None or not hasattr(reviewer, 'review_candidate'):
         return CandidateQA(status='RETRY', reasons=['semantic/style/perspective QA unavailable'])
     decision = CandidateQA.model_validate(reviewer.review_candidate(original, candidate, {
-        'category': obj['category'], 'bbox': obj['bbox'], 'projection': obj.get('projection', 'unknown')}))
+        'category': obj['category'], 'bbox': obj['bbox'], 'projection': obj.get('projection', 'unknown'),
+        'occlusion_analysis': obj.get('reconstruction', {}).get('analysis'),
+        'stage': 'high_resolution_restoration' if force_review else 'object_completion'}))
     scores = decision.scores
     if any(not math.isfinite(v) or not 0 <= v <= 1 for v in scores.values()):
         return CandidateQA(status='REJECT', reasons=['invalid QA scores'])

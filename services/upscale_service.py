@@ -1,42 +1,100 @@
-"""Replaceable Real-ESRGAN adapter with a genuine PIL Lanczos mock."""
+"""Independent neural detail restoration; completed alpha is the shape authority."""
 from pathlib import Path
-
+import numpy as np
 from PIL import Image
-
+from app.models import ModelConfig
 from app.paths import read_rgba
+from services.model_support import ModelUnavailableError, torch_runtime
+
+HD_PROMPT = '''Restore this isolated 2D game asset at high resolution. Preserve its exact shape,
+silhouette, proportions, perspective, isometric camera angle, colors, materials, lighting and art style.
+Recover fine line work, texture detail, clean edges and material definition. Remove compression artifacts,
+blurry edges, pixel noise, generation artifacts and inconsistent textures. Do not redesign or reinterpret
+the object. Do not introduce components or change its silhouette. Preserve hand-painted 2D game art,
+existing line work and stylized shading. Do not convert to photorealism or a 3D-rendered style.'''
 
 
-def choose_scale(width: int, height: int) -> int:
-    """Use x4 below 128, x3 through 256, x2 through 512, otherwise x1."""
-    edge = max(width, height)
-    if edge < 128:
-        return 4
-    if edge <= 256:
-        return 3
-    if edge <= 512:
-        return 2
-    return 1
+def resolve_upscale_factor(width: int, height: int) -> int:
+    return 4 if max(width, height) < 128 else 2
+
+
+# Public compatibility alias; one implementation defines all factor boundaries.
+choose_scale = resolve_upscale_factor
 
 
 class UpscaleService:
-    """Scale RGBA pixels without changing scene-space metadata."""
-
-    def __init__(self, mock: bool = True, backend: str | None = None):
+    """RealESRGAN_x4plus local weights; interpolation is explicitly a preview backend."""
+    def __init__(self, mock=True, backend=None, config=None):
         self.mock = mock
-        self.backend = backend or ("lanczos" if mock else "real_esrgan")
+        self.config = config or ModelConfig()
+        self.backend = backend or ('lanczos' if mock else self.config.upscale.backend)
+        self._model = None
+        self._torch = None
+        self._device = None
 
-    def upscale(self, image_path: str, scale: float) -> str:
-        """Write assets_hd/<id>@<scale>x.png and return its absolute path."""
-        if self.backend != "lanczos":
-            raise NotImplementedError("TODO: connect Real-ESRGAN in UpscaleService.upscale")
-        if scale <= 0:
-            raise ValueError("Texture scale must be positive")
+    def available(self) -> bool:
+        return self.backend == 'lanczos' or bool(self.config.upscale.checkpoint and self.config.upscale.checkpoint.is_file())
+
+    def load(self):
+        if self.backend == 'lanczos' or self._model is not None:
+            return
+        path = self.config.upscale.checkpoint
+        if path is None or not path.is_file():
+            raise ModelUnavailableError('Real-ESRGAN requires local upscale.checkpoint (RealESRGAN_x4plus.pth)')
+        try:
+            from services.rrdbnet import rrdbnet
+            torch, device = torch_runtime(self.config.device)
+            model = rrdbnet()
+            state = torch.load(str(path), map_location='cpu', weights_only=True)
+            model.load_state_dict(state.get('params_ema', state.get('params', state)), strict=True)
+            self._model = model.eval().to(device)
+            self._torch, self._device = torch, device
+        except (ImportError, RuntimeError, OSError, ValueError) as error:
+            raise ModelUnavailableError(f'Real-ESRGAN load failed: {error}; install requirements-upscale.txt') from error
+
+    def _restore(self, image):
+        self.load()
+        torch = self._torch
+        rgb = np.array(image.convert('RGB'), dtype=np.float32)/255
+        height, width = rgb.shape[:2]
+        tile = self.config.upscale.tile or max(width, height)
+        pad = self.config.upscale.tile_pad
+        output = np.empty((height*4, width*4, 3), np.uint8)
+        with torch.inference_mode():
+            for y in range(0, height, tile):
+                for x in range(0, width, tile):
+                    right, bottom = min(width, x+tile), min(height, y+tile)
+                    left, top = max(0, x-pad), max(0, y-pad)
+                    r, b = min(width, right+pad), min(height, bottom+pad)
+                    tensor = torch.from_numpy(rgb[top:b, left:r].transpose(2, 0, 1).copy()).unsqueeze(0).to(self._device)
+                    restored = self._model(tensor).clamp(0, 1)[0].permute(1, 2, 0).cpu().numpy()
+                    if restored.shape != ((b-top)*4, (r-left)*4, 3):
+                        raise ValueError('Real-ESRGAN returned incorrect dimensions')
+                    output[y*4:bottom*4, x*4:right*4] = np.rint(restored[(y-top)*4:(bottom-top)*4,
+                        (x-left)*4:(right-left)*4]*255).astype(np.uint8)
+        return Image.fromarray(output)
+
+    def upscale(self, image_path, scale):
+        if scale not in (2, 4):
+            raise ValueError('High resolution restoration supports 2x or 4x')
         source = Path(image_path)
         image = read_rgba(source)
-        size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
-        result = image.resize(size, Image.Resampling.LANCZOS)
-        root = source.parent.parent if source.parent.name in {"assets", "effects"} else source.parent
-        target = root / ("effects_hd" if source.parent.name == "effects" else "assets_hd") / f"{source.stem}@{scale:g}x.png"
+        if image.width*image.height*16 > self.config.upscale.max_output_pixels:
+            raise ValueError('Neural 4x intermediate exceeds upscale.max_output_pixels')
+        size = (image.width*scale, image.height*scale)
+        if self.backend == 'lanczos':
+            result = image.resize(size, Image.Resampling.LANCZOS)
+        elif self.backend == 'real_esrgan':
+            from candidates.alpha import extend_colors
+            rgb = self._restore(extend_colors(image))
+            result = rgb.resize(size, Image.Resampling.LANCZOS).convert('RGBA')
+            # Freeze Stage A's NEW silhouette, never the original visible mask.
+            result.putalpha(image.getchannel('A').resize(size, Image.Resampling.LANCZOS))
+        else:
+            raise ValueError(f'Unknown upscale backend: {self.backend}')
+        pixels = np.array(result); pixels[pixels[:, :, 3] == 0] = 0
+        root = source.parent.parent if source.parent.name in {'assets', 'effects'} else source.parent
+        target = root/('effects_hd' if source.parent.name == 'effects' else 'assets_hd')/f'{source.stem}@{scale:g}x.png'
         target.parent.mkdir(parents=True, exist_ok=True)
-        result.save(target, "PNG")
+        Image.fromarray(pixels).save(target, 'PNG')
         return str(target.resolve())

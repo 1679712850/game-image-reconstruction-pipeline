@@ -118,7 +118,7 @@ class QwenImageTests(unittest.TestCase):
                 self.layered(images).decompose_layers(str(self.source), output_dir=self.root / "invalid")
         self.assertFalse((self.root / "invalid").exists())
 
-    def test_edit_changes_only_masked_rgb_preserving_size_alpha_and_source(self) -> None:
+    def test_edit_returns_rgb_for_new_segmentation_without_source_alpha(self) -> None:
         original_bytes = self.source.read_bytes()
         service = ImageEditService(False)
         service._pipeline = MagicMock(return_value=SimpleNamespace(images=[Image.new("RGB", (40, 24), (200, 10, 90))]))
@@ -126,8 +126,8 @@ class QwenImageTests(unittest.TestCase):
         result = service.complete_object(str(self.source), str(self.mask), prompt="Repair stone texture", output_path=self.root / "edited.png")
         with Image.open(result) as image, Image.open(self.source) as original, Image.open(self.mask) as mask:
             out, src, edit_mask = np.array(image), np.array(original), np.array(mask)
-        np.testing.assert_array_equal(out[:, :, 3], src[:, :, 3])
-        np.testing.assert_array_equal(out[edit_mask == 0], src[edit_mask == 0])
+        self.assertEqual(out.shape[2], 3)
+        np.testing.assert_array_equal(out[edit_mask == 0], src[edit_mask == 0, :3])
         np.testing.assert_array_equal(out[edit_mask > 0, :3], np.tile([200, 10, 90], (25, 1)))
         self.assertEqual(self.source.read_bytes(), original_bytes)
         self.assertNotIn("mask_image", service._pipeline.call_args.kwargs)

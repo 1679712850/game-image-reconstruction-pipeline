@@ -36,7 +36,7 @@ def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
         previous = sum(log.get('region_key') == key for log in state.get('retry_history', [])
                        if log.get('action') == 'local_detection')
         for attempt in range(previous, config.p1.max_detection_retry):
-            if len(known) + len(recovered) >= config.scene_loop.max_objects:
+            if config.scene_loop.max_objects is not None and len(known) + len(recovered) >= config.scene_loop.max_objects:
                 return recovered, history
             log = {'retry_reason': region.get('failure_type', 'MISSED_DETECTION'),
                    'retry_count': attempt + 1, 'scene_attempt': scene_attempt,
@@ -58,7 +58,7 @@ def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
                 log['crop_path'] = str(path.resolve())
                 prompts = [region['category']] if region.get('category') else categories
                 for item in detector.detect(str(path), prompts):
-                    if len(known) + len(recovered) >= config.scene_loop.max_objects:
+                    if config.scene_loop.max_objects is not None and len(known) + len(recovered) >= config.scene_loop.max_objects:
                         break
                     local = BBox.model_validate(item['bbox'])
                     left, top = max(x, x+round(local.x/scale)), max(y, y+round(local.y/scale))

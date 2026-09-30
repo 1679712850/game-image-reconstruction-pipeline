@@ -1,0 +1,239 @@
+{
+  "pipeline": {
+    "resources": {
+      "max_vram": 22.0,
+      "soft_vram": 20.0,
+      "max_ram": 64.0,
+      "gpu_models_max_resident": 1,
+      "max_generation_retry": 2,
+      "max_oom_retry": 2,
+      "keep_alive": {
+        "grounding": false,
+        "sam": false
+      },
+      "estimated_vram": {
+        "grounding": 2.0,
+        "sam": 3.0,
+        "image_edit": 18.0,
+        "layered": 18.0
+      },
+      "estimated_ram": {
+        "grounding": 1.0,
+        "sam": 0.6
+      }
+    },
+    "cache": {
+      "enabled": false,
+      "directory": null,
+      "pipeline_version": "amodal-v1",
+      "prompt_version": "amodal-candidate-v1"
+    },
+    "candidates": {
+      "automatic": false,
+      "accept_threshold": 0.8,
+      "retry_threshold": 0.55,
+      "severe_occlusion": 0.35,
+      "export_psd": true
+    },
+    "p1": {
+      "enabled": true,
+      "max_local_crop_size": 1024,
+      "min_local_size": 512,
+      "max_sam_input_size": 2048,
+      "min_mask_bbox_ratio": 0.03,
+      "max_mask_bbox_ratio": 1.5,
+      "max_detection_retry": 0,
+      "max_segmentation_retry": 0,
+      "max_scene_retry": 0,
+      "max_problem_regions": 12,
+      "coverage_cell_size": 128,
+      "edge_density_threshold": 0.08,
+      "unassigned_threshold": 0.01,
+      "overlap_threshold": 0.01,
+      "preserve_residual_background": true,
+      "terrain_completion": true,
+      "lpips": false
+    },
+    "detection": {
+      "global_detection": {
+        "enabled": true
+      },
+      "tiling": {
+        "enabled": true,
+        "tile_size": 1024,
+        "overlap": 0.25,
+        "min_tile_size": 64
+      },
+      "multi_scale": {
+        "enabled": true,
+        "scales": [
+          1024,
+          1536
+        ]
+      },
+      "confidence": {
+        "default": 0.4,
+        "large_object": 0.5,
+        "small_object": 0.25,
+        "candidate_floor": 0.1,
+        "small_area_ratio": 0.001,
+        "large_area_ratio": 0.05
+      },
+      "dedup": {
+        "bbox_iou": 0.45,
+        "mask_iou": 0.5,
+        "overlap_ratio": 0.7,
+        "center_distance": 0.65,
+        "appearance_similarity": 0.8
+      },
+      "truncation": {
+        "edge_threshold": 12,
+        "redetect_padding": 192,
+        "max_redetections": 3
+      },
+      "diagnostics": {
+        "enabled": true
+      },
+      "budget": {
+        "max_global_passes": 1,
+        "max_tile_passes": 2,
+        "max_categories_per_pass": 6,
+        "max_total_inference_calls": 100,
+        "max_retry_calls": 3
+      },
+      "category_planner": {
+        "enabled": true,
+        "max_groups_per_tile": 4
+      },
+      "expand_categories": false,
+      "prompt_group_size": 6
+    },
+    "mock": false,
+    "max_retry": 0,
+    "exercise_retry": false,
+    "crop": {
+      "alpha_threshold": 8,
+      "padding": 16
+    },
+    "amodal": {
+      "context_padding": 0.3,
+      "severe_padding": 0.6,
+      "minimum_padding": 32,
+      "max_canvas_edge": 4096,
+      "max_canvas_pixels": 16777216,
+      "confidence_threshold": 0.65,
+      "severe_candidates": 3
+    },
+    "qa": {
+      "min_confidence": 0.35,
+      "min_occupancy": 0.08,
+      "max_mask_outside_bbox": 0.35
+    },
+    "upscale": {
+      "enabled": false,
+      "required": false
+    },
+    "reconstruction": {
+      "enabled": true
+    },
+    "export": {
+      "memory_budget_mb": 2048,
+      "low_memory": true
+    },
+    "layer_decomposition": {
+      "enabled": false
+    },
+    "object_completion": {
+      "enabled": false
+    },
+    "scene_loop": {
+      "enabled": true,
+      "max_rounds": 1,
+      "max_objects": null,
+      "target_coverage": 0.85,
+      "min_coverage_gain": 0.002,
+      "no_progress_patience": 2,
+      "covered_box_threshold": 0.85,
+      "reviewer": "rules"
+    }
+  },
+  "models": {
+    "device": "cpu",
+    "cache_dir": "/Users/honghuiqian/develop/game_image_reconstruction_pipeline/benchmarks/configs/../../.cache/models",
+    "local_files_only": true,
+    "categories": [
+      "tree",
+      "rock",
+      "building",
+      "stone_lantern",
+      "flag",
+      "tombstone"
+    ],
+    "projection": "isometric",
+    "grounding": {
+      "model_id": "IDEA-Research/grounding-dino-tiny",
+      "revision": "main",
+      "box_threshold": 0.3,
+      "text_threshold": 0.25,
+      "nms_iou": 0.5,
+      "max_detections": 100,
+      "tiled": true,
+      "tile_size": 768,
+      "tile_overlap": 0.25,
+      "include_full_image": true,
+      "prompt_group_size": 6,
+      "prompts": {},
+      "relax_from_round": 3,
+      "relaxed_box_threshold": 0.25,
+      "relaxed_text_threshold": 0.2
+    },
+    "sam": {
+      "model_config_name": "configs/sam2.1/sam2.1_hiera_t.yaml",
+      "checkpoint": null,
+      "repo_id": "facebook/sam2.1-hiera-tiny",
+      "filename": "sam2.1_hiera_tiny.pt",
+      "revision": "main",
+      "multimask_output": false,
+      "mask_threshold": 0.0,
+      "local_retry": true,
+      "local_padding": 64
+    },
+    "qwen_layered": {
+      "model_path": null,
+      "quantized_model_path": null,
+      "dtype": "auto",
+      "num_inference_steps": 50,
+      "true_cfg_scale": 4.0,
+      "negative_prompt": " ",
+      "seed": 0,
+      "layers": 4,
+      "resolution": 640,
+      "cfg_normalize": true,
+      "use_en_prompt": true
+    },
+    "qwen_image_edit": {
+      "model_path": null,
+      "quantized_model_path": null,
+      "dtype": "auto",
+      "num_inference_steps": 50,
+      "true_cfg_scale": 4.0,
+      "negative_prompt": " ",
+      "seed": 0
+    },
+    "scene_reviewer": {
+      "model": "",
+      "base_url": null,
+      "api_key_env": "VLM_API_KEY",
+      "timeout": 60.0,
+      "max_retries": 1,
+      "image_long_edge": 1536
+    },
+    "upscale": {
+      "backend": "real_esrgan",
+      "checkpoint": null,
+      "tile": 256,
+      "tile_pad": 16,
+      "max_output_pixels": 67108864
+    }
+  }
+}

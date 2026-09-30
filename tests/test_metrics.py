@@ -24,6 +24,6 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(ground_pivot(mask), {"x": 4.0, "y": 7.5})
 
     def test_scale_boundaries(self) -> None:
-        for edge, scale in ((127, 4), (128, 3), (256, 3), (257, 2), (512, 2), (513, 1)):
+        for edge, scale in ((127, 4), (128, 2), (256, 2), (257, 2), (512, 2), (513, 2)):
             with self.subTest(edge=edge):
                 self.assertEqual(choose_scale(edge, 10), scale)

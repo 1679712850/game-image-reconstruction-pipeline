@@ -76,7 +76,7 @@ SAM 后对同类、空间重叠且 mask IoU 达标的对象做 mask 并集并合
 
 实体 PNG 沿用现有 `assets/`、`assets_hd/` 和 `masks/`，保持下游兼容。
 环境特效写入 `effects/`、`effects_hd/`，manifest 中与实体 `objects` 分开存入
-`environment_effects`。新增字段向后兼容，manifest schema_version 保持 1.1。
+`environment_effects`。当前 manifest schema_version 为 1.2；读取器接受 1.1 并通过 migration helper 归一化。
 
 `diagnostics/` 自动生成：
 
@@ -116,3 +116,21 @@ stone_lantern / flag / box / jar / sign / tombstone，1 轮、20 对象预算、
 扩展复检由注入的边缘对象回归测试验证。
 20 对象预算下，SAM 再融合 1 对重复后输出 19 个对象记录；13 个待复核。
 报告仍可见柱子/建筑被模型识别成石灯等误判，不能据此宣称小目标召回率已量化达标。
+
+## Detection budget and benchmark (2026-09-30)
+
+`detection.budget` is shared by global discovery, regional tiled detection and gap-fill recovery. `category_planner` ranks global/neighboring detections and scene categories to choose a bounded set of groups per tile; exhausted calls are recorded as `budget_exhausted`. The three pass purposes are distinct and do not re-run a full category matrix.
+
+`benchmarks.runner` calls the production manifest or graph and reports one-to-one GT recall/precision, duplicate rate, fragmentation rate, miss rate, size buckets, and optional mask IoU/Dice/boundary F-score. The seed annotation is draft and must be reviewed before it becomes an acceptance gate:
+
+```bash
+.venv/bin/python -m benchmarks.runner \
+  --annotation benchmarks/annotations/sect_ruins_courtyard.json \
+  --output benchmarks/reports/sect_ruins \
+  --manifest output/real_test/scene.json \
+  --config benchmarks/configs/default.yaml
+```
+
+The benchmark does not use `reconstruction_score` as decomposition quality. Its pipeline section keeps semantic coverage, residual pixels and asset-ready counts separate.
+
+See [ENGINEERING_EVALUATION.md](ENGINEERING_EVALUATION.md) for current budgets, schema/config migration and real ROI acceptance limits. Earlier six-class/20-object results above remain historical smoke evidence.

@@ -3,6 +3,7 @@ from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
 import inspect
+import logging
 import time
 import threading
 import sys
@@ -19,7 +20,7 @@ METHODS = {
     'sam': ('segmentation', ['segment', 'segment_local', 'predict_candidates']),
     'image_edit': ('generation', ['complete_object', 'generate_object']),
     'layered': ('generation', ['decompose_layers']),
-    'reviewer': ('qa', ['review', 'classify_crop', 'review_candidate']),
+    'reviewer': ('qa', ['review', 'classify_crop', 'review_candidate', 'analyze_occlusion']),
     'upscale': ('upscale', ['upscale']),
 }
 
@@ -37,6 +38,9 @@ class ExecutionRuntime:
         self.root = None
         self.lock = threading.RLock()
         self._sessions = {}
+        self.model_fingerprints = {}
+        from detection.budget import BudgetTracker
+        self.detection_budget = BudgetTracker(config.detection.budget)
         for name, (namespace, methods) in METHODS.items():
             service = getattr(services, name, None)
             if service is None:
@@ -76,24 +80,14 @@ class ExecutionRuntime:
         identity = {'adapter': service.__class__.__module__+'.'+service.__class__.__qualname__,
                     'method': method, 'mock': getattr(service, 'mock', None), 'backend': getattr(service, 'backend', None),
                     'settings': getattr(service, 'config', None).model_dump(mode='json') if hasattr(getattr(service, 'config', None), 'model_dump') else None, 'prompt': getattr(service, '_prompt', None)}
-        # In-place local model updates invalidate the key even when the path is unchanged.
-        settings = getattr(service, 'config', None)
-        if settings is not None and hasattr(settings, 'model_dump'):
-            model_paths = []
-            for section in ('grounding', 'sam', 'qwen_image_edit', 'qwen_layered'):
-                options = getattr(settings, section, None)
-                if options is None:
-                    continue
-                for field in ('model_id', 'model_path', 'quantized_model_path', 'checkpoint'):
-                    value = getattr(options, field, None)
-                    if value:
-                        path = Path(value)
-                        if path.is_dir():
-                            model_paths.extend((str(p), p.stat().st_size, p.stat().st_mtime_ns)
-                                for p in sorted(path.rglob('*')) if p.is_file() and p.suffix in {'.json', '.safetensors', '.bin', '.pt'})
-                        elif path.is_file():
-                            model_paths.append((str(path), path.stat().st_size, path.stat().st_mtime_ns))
-            identity['local_versions'] = model_paths
+        from services.model_fingerprint import service_versions
+        identity['model_fingerprints'] = service_versions(getattr(service,'config',None),name,self.model_fingerprints)
+        # P0 scanning owns call reservations. Legacy local retry calls also obey the run budget.
+        if name == 'grounding' and method == '_infer_image' and self.node_name in {'retry_objects','p1_scene'}:
+            if not self.detection_budget.consume('redetection'):
+                raise RuntimeError('Detection retry inference budget exhausted')
+        if name == 'grounding' and method in {'detect','detect_round','detect_p0'}:
+            return function(*args, **kwargs)
         key = self.cache.key(namespace, identity, parameters)
         hit, result = self.cache.get(namespace, key)
         if hit:
@@ -101,6 +95,9 @@ class ExecutionRuntime:
                 pass
             return result
         for attempt in range(self.config.resources.max_oom_retry+1):
+            if attempt and name == 'grounding' and method == '_infer_image':
+                if not self.detection_budget.consume('redetection'):
+                    raise RuntimeError('Detection OOM retry budget exhausted')
             started = len(self.profiler.events)
             outer_detection = name == 'grounding' and method != '_infer_image'
             empty_segmentation = method in {'segment', 'segment_local'} and parameters.get('detections') == []
@@ -115,7 +112,7 @@ class ExecutionRuntime:
                     try:
                         torch = sys.modules.get('torch')
                         gpu_start = gpu_end = None
-                        if torch is not None and torch.cuda.is_available() and managed and self.manager.entries[name].status == 'GPU':
+                        if torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available() and managed and self.manager.entries[name].status == 'GPU':
                             gpu_start, gpu_end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
                             gpu_start.record()
                         result = function(*args, **kwargs)
@@ -153,8 +150,12 @@ class ExecutionRuntime:
         with self.lock:
             root = Path(state['output_dir']).resolve()
             if name == 'load_image' or root not in self._sessions:
-                self._sessions[root] = (Profiler(), CacheManager(self.config.cache, root))
-            self.profiler, self.cache = self._sessions[root]
+                self._sessions[root] = (Profiler(), CacheManager(self.config.cache, root), {})
+            self.profiler, self.cache, self.model_fingerprints = self._sessions[root]
+            from detection.budget import restore_budget
+            self.detection_budget = restore_budget(self.config.detection.budget,
+                                                  {} if name == 'load_image' else state.get('detection_budget',{}))
+            self.node_name = name
             self.manager.profiler = self.profiler
             self.root = root
             self.instance_id = None
@@ -162,6 +163,9 @@ class ExecutionRuntime:
             self.profiler.start_sampling()
             token = _active.set(self)
             try:
+                label = {'detect_instances':'Detection','segment_instances':'Segmentation','qa_objects':'QA',
+                         'upscale_objects':'Upscale','export':'Export','reconstruct_scene':'Reconstruction'}.get(name,'Pipeline')
+                logging.getLogger(__name__).info('[%s] node=%s event=start',label,name)
                 with self.profiler.span(name):
                     try:
                         updates = function(state)
@@ -169,6 +173,8 @@ class ExecutionRuntime:
                         from services.resource_fallback import recover_node
                         updates = recover_node(name, state, error, self.services)
                     self.manager.end_stage(final=name == 'export')
+                logging.getLogger(__name__).info('[%s] node=%s event=end status=%s',label,name,updates.get('pipeline_status','completed_stage'))
+                updates['detection_budget'] = self.detection_budget.report()
                 paths = self.profiler.write(root, self.cache.stats, self.manager.states()) if name == 'export' else None
                 if paths:
                     updates.update(performance_report_path=paths[0], timeline_path=paths[1])

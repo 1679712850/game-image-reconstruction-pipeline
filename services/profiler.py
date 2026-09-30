@@ -25,7 +25,7 @@ def snapshot():
         # ru_maxrss is a process lifetime peak, not current RSS.
         value['rss_lifetime_peak'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024)
     torch = sys.modules.get('torch')
-    if torch is not None and torch.cuda.is_available():
+    if torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available():
         try:
             free, total = torch.cuda.mem_get_info()
             value.update(vram_total=total, vram_free=free, vram_allocated=torch.cuda.memory_allocated(),
@@ -36,7 +36,7 @@ def snapshot():
                 pass
         except (RuntimeError, AttributeError):
             pass
-    elif torch is not None and hasattr(torch, 'mps') and torch.backends.mps.is_available():
+    elif torch is not None and hasattr(torch, 'mps') and hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         value['vram_allocated'] = torch.mps.current_allocated_memory()
         value['vram_reserved'] = torch.mps.driver_allocated_memory()
     return value
@@ -74,7 +74,7 @@ class Profiler:
         start = time.time(); before = self.sample(); index = len(self.samples)-1
         record = {'name': name, 'kind': kind, 'start_time': start, **metadata}
         torch = sys.modules.get('torch')
-        gpu_peak = kind in {'load', 'inference'} and torch is not None and torch.cuda.is_available()
+        gpu_peak = kind in {'load', 'inference'} and torch is not None and hasattr(torch, 'cuda') and torch.cuda.is_available()
         if gpu_peak:
             torch.cuda.reset_peak_memory_stats()
         try:
@@ -116,8 +116,12 @@ class Profiler:
             record['total'] = sum(record.values())
         hits = sum(v['hit'] for v in cache.values()); misses = sum(v['miss'] for v in cache.values())
         execution_time = sum(e['duration'] for e in self.events if e['kind'] == 'node')
+        peak_ram = max((s.get('rss') or 0 for s in self.samples), default=0)
+        peak_vram = max([s.get('vram_allocated') or 0 for s in self.samples]+[e.get('vram_peak') or 0 for e in self.events], default=0)
         return {'total_time': execution_time, 'wall_time': time.time()-self.started,
-                'units': {'memory': 'bytes', 'time': 'seconds'},
+                'peak_ram_mb': peak_ram/1024**2 if peak_ram else None,
+                'peak_vram_mb': peak_vram/1024**2 if peak_vram else None,
+                'units': {'memory': 'bytes', 'peak_ram_mb': 'MiB', 'peak_vram_mb': 'MiB', 'time': 'seconds'},
                 'models': dict(aggregates), 'model_states': models, 'instances': dict(instances),
                 'retry': {'calls': retry_calls, 'duration': retry_duration, 'gpu_time': retry_gpu if gpu_measured else None,
                           'fraction_of_total': retry_duration/max(.001, execution_time)},

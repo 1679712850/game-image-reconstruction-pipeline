@@ -46,6 +46,8 @@ def export_p1(state, *, mock=None):
              'terrain_visible_pixels':sum(t['visible_pixel_count'] for t in state.get('terrain_layers',[])),
              'retry':dict(retry),'reconstruction':reconstruction,
              'definition':owner['definition'], 'mock':mock if mock is not None else state.get('detection_coverage_review',{}).get('mock_local_detection_skipped',False)}
+    summary['completion_metrics'] = state.get('completion_metrics', {})
+    summary['pipeline_status'] = state.get('pipeline_status', 'completed')
     failures=[]
     if owner['unassigned_ratio']>state.get('p1_thresholds',{}).get('unassigned',.01): failures.append('UNASSIGNED_REGION')
     if owner['overlap_ratio']>state.get('p1_thresholds',{}).get('overlap',.01): failures.append('PIXEL_CONFLICT')

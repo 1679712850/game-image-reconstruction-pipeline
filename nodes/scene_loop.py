@@ -64,7 +64,7 @@ def make_qa_scene(config: PipelineConfig, reviewer: SceneReviewService) -> Calla
         hard_stop = ""
         if state["detection_round"] >= limits.max_rounds:
             hard_stop = "max_rounds"
-        elif len(state["objects"]) >= limits.max_objects:
+        elif limits.max_objects is not None and len(state["objects"]) >= limits.max_objects:
             hard_stop = "max_objects"
         elif state.get("scene_no_progress", 0) >= limits.no_progress_patience:
             hard_stop = "no_progress"

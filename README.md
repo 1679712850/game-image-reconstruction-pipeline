@@ -13,16 +13,20 @@ P1 默认将未分类原图像素保存在明确标记的 residual 背景层；�
 已接入真实 Grounding DINO（Transformers）和官方 SAM 2.1，并在 CPU 上完成
 在线下载及离线推理验收。真实产物位于 `output/real_test/`；原 Mock 模式仍保留。
 初始类别来自配置；场景循环支持 LangChain 视觉 LLM 审查，默认使用明确标记的规则模式。
-高清化仍使用 Lanczos。详细结果见
+现已加入独立 Real-ESRGAN 本地后端；Mock 的 Lanczos 仅是插值预览。真实高清质量尚未使用权重验收。历史检测/分割结果见
 [VERIFICATION.md](VERIFICATION.md)。
 
 Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接口也已实现。
 本次仅进行无权重的代码接入：两个 `model_path` 均为空、节点默认关闭，
 未安装 Qwen 依赖、未下载 Qwen 权重、未进行 Qwen 神经网络推理。
 
+## 工程评测与验收
+
+生产流程已接入 ROI Benchmark、共享检测预算、区域类别分配、基础资产/高清状态分离、schema 1.2 迁移和 PSD 磁盘缓冲。默认高清关闭。终端优先报告语义覆盖与资产状态；residual 带来的高重建相似度不表示拆分完整。完整配置审计、指标定义、可执行命令、兼容边界见 [docs/ENGINEERING_EVALUATION.md](docs/ENGINEERING_EVALUATION.md)。
+
 ## P0 高召回检测（2026-09-30）
 
-默认 graph 已升级为整图 + 1024/1536 重叠切片、10 组细分类别、候选来源追踪、
+默认 graph 使用整图 + 1024/1536 重叠切片、10 组细分类别的区域分配、共享扫描预算、候选来源追踪、
 多特征融合、边缘复检、小目标复核保护，以及自动 `diagnostics/report.html`。
 新策略集中配置在 `config/pipeline.yaml:detection`，覆盖旧模型配置中的 Tile/NMS 策略。
 实体 PNG 继续使用原有 assets 路径；环境特效单独存储。
@@ -79,7 +83,7 @@ python -m unittest discover -s tests -v
 `--real` 启用 Grounding DINO + SAM 2；模型加载失败会明确报错，不会静默回退到 Mock。
 Mock 模式无需 API key、不发起模型请求、不下载模型权重。
 
-终端打印实际启用的阶段；检测循环会重复打印对应阶段，retry 另行标记。完成时打印 `Done. Reached END.`，
+终端打印实际启用的阶段；检测循环会重复打印对应阶段，retry 另行标记。完成时打印 `Pipeline completed (<status>)` 和分层指标，
 `debug/run.json` 保存节点访问顺序及最终可序列化 State。
 
 ## Architecture
@@ -186,16 +190,16 @@ Pydantic 验证 projection 枚举、有效 bbox、置信度、QA 状态及 retry
 ## 坐标与纹理约定
 
 - `bbox`：检测框，在原图的左上角原点像素坐标中表示为 x/y/w/h。
-- `crop_bbox`：mask > alpha_threshold 的紧框，加 padding 后限制在原图内。
+- `crop_bbox`：源可见资产是 alpha > threshold 的紧框；完成资产是扩展画布内的 alpha 紧框，允许负坐标和越出场景。
   右、下边界为 exclusive，单像素 mask 的宽高为 1。
-- mask PNG 为原图尺寸的灰度图；**assets PNG 为紧凑裁剪尺寸**。
+- visible/source mask PNG 为原图尺寸灰度图；reconstructed mask 为完整资产局部画布 alpha；**assets PNG 为紧凑裁剪尺寸**。
   RGB 来自原图，Alpha 来自 mask。
 - `pivot`：原始 crop 内最底部有效 alpha 像素的平均 x 和底行像素中心 y；
   空 alpha 的独立工具回退到 bottom center。没有改变地图坐标。
 - `z_order = crop_bbox.y + pivot.y`。重建按该值升序 alpha composite。
 - `logical_size`：原始裁剪尺寸；`texture_size`：高清图尺寸；
   `texture_scale` 只影响纹理，不影响坐标、pivot 或画布尺寸。
-- 放大长边区间：<128 → 4x，128–256 → 3x，>256–512 → 2x，>512 → 1x。
+- 放大倍率由 `services.upscale_service.resolve_upscale_factor` 统一解析：长边 `<128` 为 4x，其余为 2x；`choose_scale` 仅作为旧调用的兼容别名。高清是可选增强，不改变基础资产 QA。
 - 无显式 EXIF 旋转校正：坐标对应 Pillow 解码的原始像素布局；
   输入最好使用已经定向的 PNG。
 
@@ -208,7 +212,7 @@ Pydantic 验证 projection 枚举、有效 bbox、置信度、QA 状态及 retry
 ```text
 output/test/
 ├── assets/              tree_001.png、rock_001.png 等紧凑 RGBA
-├── assets_hd/           tree_001@3x.png 等 Lanczos 纹理
+├── assets_hd/           tree_001@2x.png / @4x.png（后端与 QA 写入元数据）
 ├── masks/               原图尺寸的实例灰度 mask
 ├── debug/run.json       运行节点顺序及最终 state
 ├── scene.json
@@ -242,7 +246,7 @@ Mock retry 会重新生成失败对象的 mask 和 crop，再显式模拟通过�
 保留原始低置信度及说明，不伪造置信度提升。
 真实模式会对失败对象在带 padding 的局部图中重新 SAM 分割，然后恢复原图坐标；
 检测置信度保持不变，因此单纯局部分割不会把低置信候选强行通过。
-场景循环还会重新检测未移除区域；更复杂的逐对象重试诊断仍待实现。
+场景循环只对剩余/gap 区域追加检测；P1 retry 会按原因执行 candidate recovery、局部 mask repair、类别复核或跨 Tile 完整轮廓复检，并要求质量改进才替换。生成式 amodal completion 使用独立候选与生成预算。
 
 ## Checkpoint / Human-in-the-loop 接口
 
@@ -277,13 +281,13 @@ graph.invoke(None, run_config)  # 继续到 END
 | Qwen-VL | services/vlm_service.py | 固定 Mock；可注入支持 structured output 的 LangChain chat model |
 | Grounding DINO | services/grounding_service.py | Transformers 真实推理、坐标裁剪、类别匹配、class-aware NMS |
 | SAM 2 | services/sam_service.py | Meta 官方 SAM 2.1；bbox prompt、原尺寸 mask、最佳候选选择 |
-| Real-ESRGAN | services/upscale_service.py | 当前显式使用 Pillow Lanczos；生成式超分仍待实现 |
+| Real-ESRGAN | services/upscale_service.py | 本地 RealESRGAN_x4plus、分块推理、完成轮廓锁定、独立视觉 QA；权重留空 |
 | Qwen-Image-Layered | services/qwen_layered_service.py、nodes/decompose_layers.py | 本地 Diffusers 适配、可选节点、RGBA 导出；权重留空；Mock 单层透传 |
 | Qwen-Image-Edit | services/image_edit_service.py、nodes/complete_objects.py | 本地 Diffusers 编辑、mask 合成、候选导出；权重留空；Mock 无修改 |
 | PSD / Godot | exporters/psd_exporter.py、exporters/godot_exporter.py | PSD 输出真实 RGBA 图层；Godot 仍为占位接口 |
 
-Grounding DINO、SAM 2 与 Qwen 的可选依赖方式见下文。Real-ESRGAN
-仍需后续接入。基础 requirements.txt 仅列出
+Grounding DINO、SAM 2 与 Qwen 的可选依赖方式见下文。Real-ESRGAN 使用
+`requirements-upscale.txt` 和 `models.yaml:upscale.checkpoint`。基础 requirements.txt 仅列出
 langgraph、langchain、pydantic、pillow、numpy、opencv-python、pyyaml、
 python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 
@@ -293,7 +297,7 @@ python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 重建坐标与 alpha 混合、Y-sort、pivot、scale 边界、schema 校验、配置、
 正常 graph、强制 retry、持续失败耗尽预算、无检测、checkpoint 暂停/恢复。
 
-后续工作：Qwen 真实权重与 CUDA 峰值验收、生成质量评估、Real-ESRGAN、
+后续工作：Qwen 真实权重与 CUDA 峰值验收、生成质量评估、Real-ESRGAN 真实质量验收、
 持久化 saver 和人工复核 UI、Godot 导出。P1/P2 已实现的能力和具体边界以对应文档为准。
 
 ## Grounding DINO + SAM 2 真实模式
@@ -358,7 +362,7 @@ refine/crop/QA/metadata/reconstruct/export 节点。没有手工框替换真实�
 ```
 
 `mock: false` 表示当前采用真实检测/分割路径，不代表 Qwen-VL、
-Real-ESRGAN 或所有未来模型已经接入。`debug/run.json.models` 保存本次模型配置。
+Real-ESRGAN 或所有模型均已完成真实质量验收。`debug/run.json.models` 保存本次模型配置。
 
 ### 本次实测范围
 
@@ -427,22 +431,23 @@ Layered Mock 生成一个像素不变的 RGBA 层，标记 `mock_passthrough`，
 必要时将完整图层画布缩放回输入场景尺寸，并同时记录 `model_size` 和 `canvas_size`。
 `order` 只记录返回顺序；图层语义、遮挡关系与正确合成顺序仍需验证。
 
-Image Edit 支持以下显式局部编辑请求；启用生成后也可根据遮挡/缺损 QA 自动选择修复策略：
+Image Edit 支持以下显式重建请求；启用生成后也可根据遮挡/缺损 QA 自动选择修复策略：
 
 ```json
 [
   {
     "object_id": "tree_001",
     "mask_path": "tree_mask.png",
-    "prompt": "Repair the tree texture while preserving its style and silhouette."
+    "prompt": "Reconstruct the complete tree including the hidden trunk and roots, preserving its style."
   }
 ]
 ```
 
 `mask_path` 相对请求 JSON 解析。mask 必须是**原始裁剪资产尺寸**，
-不是整张场景尺寸，也不是高清纹理尺寸。白色允许修改，黑色保持原 RGB。
-空 mask、重复对象 ID、未知对象、空提示词、尺寸不匹配均报错。
-无请求时编辑节点直接返回空结果，不调用模型。
+不是整张场景尺寸，也不是高清纹理尺寸。请求 mask 作为修复区域提示归档；
+重建模式会扩大允许编辑的区域，黑色不再冻结最终轮廓。扩展 edit mask 与输出 alpha 相互独立。
+空 mask、重复对象 ID、未知对象、空提示词、尺寸不匹配会报错或写入候选失败记录。
+无显式请求时，自动策略仍会分析遮挡并为需要补全的对象创建候选。
 
 可从一次 Mock 基线运行生成测试请求，再完整运行两个节点：
 
@@ -458,7 +463,7 @@ root.mkdir(parents=True, exist_ok=True)
 scene = json.loads(Path("output/qwen_baseline/scene.json").read_text(encoding="utf-8"))
 obj = scene["objects"][0]
 Image.new("L", tuple(obj["logical_size"]), 255).save(root / "tree_mask.png")
-requests = [{"object_id": obj["id"], "mask_path": "tree_mask.png", "prompt": "Repair the tree texture while preserving its style and silhouette."}]
+requests = [{"object_id": obj["id"], "mask_path": "tree_mask.png", "prompt": "Reconstruct the complete tree including the hidden trunk and roots, preserving its style."}]
 (root / "requests.json").write_text(json.dumps(requests, indent=2), encoding="utf-8")
 PY
 .venv/bin/python main.py --input input/test.png --output output/qwen_mock_demo \
@@ -466,11 +471,13 @@ PY
   --exercise-retry
 ```
 
-Image Edit Mock 写出独立、像素不变的候选 PNG 并标记 `mock_noop`。
-真实适配器将提示词与 RGB 图传给编辑模型，然后在本地按 mask 合成结果，
-保留原始 alpha 与逻辑尺寸。**mask 不作为模型的原生 inpainting 参数**；
-显式局部 RGB 编辑不改变原 alpha；P2 的完整生成路径另行恢复 SAM 轮廓、
-归一化尺寸、恢复 anchor 并进行候选 QA。Qwen 真实质量仍需本地权重验收。
+Image Edit Mock 在透明扩展画布上透传可见像素，并标记 `mock_noop`。
+真实适配器返回 RGB 生成结果，不贴回旧 alpha。Qwen 单图管线没有原生 mask 参数，
+edit mask 仅控制 RGB 合成；语义 amodal 预测作为结构/坐标提示，并用于后续 SAM 多候选选择。
+生成后重新分割、局部 trimap 边缘估计、清理微小噪点和孔洞，再做面积/位置/视觉 QA。
+补全资产保持场景尺度，允许负 crop 坐标；独立 PNG 不按原场景边界裁切。
+完整说明与真实模型配置见 [遮挡重建与高清修复](docs/AMODAL_RECONSTRUCTION.md)。
+Qwen、VLM 与 Real-ESRGAN 真实质量仍需配置本地权重/视觉端点后验收。
 
 ### 新增输出与边界
 
@@ -485,7 +492,7 @@ output/qwen_mock_demo/
 └── reconstruction.png
 ```
 
-`scene.json` 版本为 `1.1`，保留已有 `layers` 语义计划，另增
+`scene.json` 版本为 `1.2`，保留已有 `layers` 语义计划，另增
 `decomposed_layers` 与 `object_edits`。新增文件路径同样相对输出目录，
 包含在 `exported_assets` 内。兼容的 `object_edits` 保留原始编辑记录；最终决策读取
 `candidate_registry`、`accepted_asset` 和 provenance。
@@ -560,4 +567,24 @@ debug/round_02/...              后续轮次
 不是最后一轮的结果。资产重试或更新会生成带轮次/重试后缀的文件，
 消费者应读取 manifest 引用；目录可能保留此前候选文件。
 `retry_count` 在最终 state 中是各轮总重试次数，`total_retry_count` 同样保留累计值。
-将 `scene_loop.enabled: false` 可恢复单轮图；切片与提示词仍由 models 配置独立控制。
+将 `scene_loop.enabled: false` 可恢复单轮图；生产切片扫描由 `pipeline.yaml:detection` 控制，模型和基础提示词由 models 配置提供。
+
+## Benchmark, completion status, and schema 1.2
+
+The production graph remains the only detection implementation. `benchmarks.runner` evaluates a reviewed ROI annotation against its `scene.json`; it never replaces global/tiled detection. An annotation supports bbox-only GT, optional mask files, ROI, ignore objects/regions, semantic groups and instance IDs.
+
+```bash
+.venv/bin/python -m benchmarks.runner \
+  --annotation benchmarks/annotations/sect_ruins_courtyard.json \
+  --output benchmarks/reports/sect_ruins \
+  --manifest output/real_test/scene.json \
+  --config benchmarks/configs/default.yaml
+```
+
+The report has three layers: detection quality (recall, precision, duplicates, fragments), asset quality (mask/boundary QA and asset-ready), and scene quality (semantic coverage, residual/unassigned pixels and reconstruction fidelity). A residual layer may preserve a pixel-perfect reconstruction while contributing zero semantic coverage. The terminal summary follows the same order and labels GT-only metrics as requiring a benchmark.
+
+`upscale.enabled` may be `false`, `true`, or `auto`; YAML defaults to `false`. Upscale errors update `enhancement.status` and do not change `base_asset_status`. Required HD failure adds delivery review; base assessment remains factual. The default factor policy is centralized in `resolve_upscale_factor`: `<128px` is 4x and all larger assets are 2x; `choose_scale` remains a compatibility alias.
+
+Exported manifests use schema `1.2`. `schemas.migration.normalize_manifest` accepts 1.1 and adds explicit visible/full geometry plus base/enhancement status. Full reconstructed assets can exceed the visible source crop.
+
+See [the engineering contracts](docs/ENGINEERING_EVALUATION.md) for configuration consumers, detection scheduling, metric definitions and reproducible commands; [the delivery report](docs/IMPLEMENTATION_REPORT.md) records tests, real-image results and remaining acceptance limits.

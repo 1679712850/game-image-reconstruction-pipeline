@@ -1,0 +1,4 @@
+# Large regenerable model outputs remain available locally, reports are retained.
+reports/*/pipeline/
+# Intermediate evaluations before annotation review are superseded by baseline/current.
+reports/sect_ruins_*/

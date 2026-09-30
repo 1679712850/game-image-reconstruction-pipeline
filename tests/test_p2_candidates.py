@@ -26,6 +26,18 @@ class Review:
         self.decisions = decisions or [CandidateQA(status='ACCEPT', scores=scores(), evaluator='test_vision')]
         self.calls = 0
 
+    def analyze_occlusion(self, source, crop, context):
+        with Image.open(crop) as image:
+            alpha = image.convert('RGBA').getchannel('A')
+            x,y,r,b = alpha.getbbox(); w,h = image.size
+        total = (context.get('visible_pixel_count') or 0)+(context.get('occluded_pixel_count') or 0)
+        observed = (context.get('occluded_pixel_count') or 0)/max(1,total)
+        needed = bool(context.get('requires_inpainting') or context.get('is_truncated') or observed)
+        return {'object_id':context['id'], 'object_type':context['category'], 'occlusion_ratio':max(.25,observed) if needed else 0,
+            'needs_completion':needed, 'reconstruction_confidence':.95, 'occluded_directions':['bottom'] if needed else [],
+            'max_expansion_ratio':3, 'full_shape_polygons':[[(x/w,y/h),((r-1)/w,y/h),((r-1)/w,(b+7)/h),(x/w,(b+7)/h)]],
+            'likely_full_shape':'Continuous trunk/base below the visible cutoff', 'boundary_reasoning':'Bottom occlusion', 'evidence':'vision'}
+
     def review_candidate(self, *args):
         value = self.decisions[min(self.calls, len(self.decisions)-1)]
         self.calls += 1
@@ -41,21 +53,32 @@ class Generator:
         self.prompts.append(prompt)
         if self.fail:
             raise RuntimeError('CUDA out of memory')
-        image = Image.new('RGBA', (100,100))
-        ImageDraw.Draw(image).rectangle((40,25,59,74), fill=(240,15,25,255))
-        path = Path(output_path); path.parent.mkdir(parents=True,exist_ok=True); image.save(path)
+        return self._output(source, output_path)
+
+    def _output(self, source, output_path):
+        with Image.open(source) as original:
+            rgba = np.array(original.convert('RGBA'))
+            x,y,r,b = original.convert('RGBA').getchannel('A').getbbox()
+        pixels = np.zeros_like(rgba[:,:,:3])
+        pixels[rgba[:,:,3]>8] = [240,15,25]
+        pixels[b:min(b+8,pixels.shape[0]),x:r] = [240,15,25]
+        path=Path(output_path); path.parent.mkdir(parents=True,exist_ok=True); Image.fromarray(pixels).save(path)
         return str(path)
 
     def complete_object(self, source, mask, *, prompt, output_path):
         self.prompts.append(prompt)
         if self.fail:
             raise RuntimeError('generation unavailable')
-        with Image.open(source) as original:
-            image=original.copy()
-        image.paste((240,15,25), (0,0,image.width,image.height))
-        image.putalpha(Image.open(source).getchannel('A'))
-        path=Path(output_path); path.parent.mkdir(parents=True,exist_ok=True); image.save(path)
-        return str(path)
+        return self._output(source, output_path)
+
+
+class Segmenter:
+    mock = False
+    def segment(self, path, records):
+        with Image.open(path) as image:
+            rgb=np.asarray(image.convert('RGB'))
+        mask=((rgb[:,:,0]>150)&(rgb[:,:,1]<80)).astype(np.uint8)*255
+        return [{**records[0], 'mask':mask}]
 
 
 class CandidateIntegration(unittest.TestCase):
@@ -68,16 +91,16 @@ class CandidateIntegration(unittest.TestCase):
                   'bbox':{'x':10,'y':20,'w':20,'h':30},'crop_bbox':{'x':10,'y':20,'w':20,'h':30},
                   'asset_path':str(self.original),'mask_path':str(self.mask),'requires_inpainting':False}
         self.state={'output_dir':str(self.root),'source_path':str(self.original),'objects':[self.obj], 'width':80,'height':80}
-        self.config=PipelineConfig(object_completion={'enabled':True},resources={'max_generation_retry':2})
+        self.config=PipelineConfig(upscale={'enabled':True}, object_completion={'enabled':True},resources={'max_generation_retry':2})
 
     def tearDown(self):
         self.temp.cleanup()
 
     def test_selected_generated_pixels_flow_to_scene_png_and_psd(self):
-        self.obj.update(occluded_pixel_count=80,visible_pixel_count=20,status='manual_review')
-        result=run_candidates(self.state,self.config,Generator(),reviewer=Review())
+        self.obj.update(occluded_pixel_count=40,visible_pixel_count=60,status='manual_review')
+        result=run_candidates(self.state,self.config,Generator(),sam=Segmenter(),reviewer=Review())
         obj=result['objects'][0]; registry=result['candidate_registry']['tree_001']
-        self.assertEqual(obj['accepted_candidate_id'],'generation_v1')
+        self.assertEqual(obj['accepted_candidate_id'],'generation_c1_v1')
         self.assertEqual(obj['asset_path'],obj['accepted_asset'])
         self.assertNotEqual(obj['mask_path'],self.obj['mask_path'])
         self.assertEqual(obj['placement']['anchor'],registry['source']['placement']['anchor'])
@@ -96,14 +119,14 @@ class CandidateIntegration(unittest.TestCase):
         raw=Path(psd).read_bytes(); self.assertEqual(raw[:4],b'8BPS')
         self.assertEqual(struct.unpack('>h',raw[42:44])[0],-1)
         self.assertTrue((self.root/'debug/candidates/tree_001_contact_sheet.png').exists())
-        self.assertEqual(json.loads((self.root/'metadata/candidates.json').read_text())['tree_001']['accepted_candidate_id'],'generation_v1')
+        self.assertEqual(json.loads((self.root/'metadata/candidates.json').read_text())['tree_001']['accepted_candidate_id'],'generation_c1_v1')
 
     def test_retry_changes_prompt_and_later_reject_does_not_win(self):
         self.obj['status']='manual_review'; self.obj['requires_inpainting']=True
         generator=Generator()
         review=Review([CandidateQA(status='RETRY',scores=scores(perspective=.6),reasons=['perspective mismatch']),
                        CandidateQA(status='ACCEPT',scores=scores())])
-        result=run_candidates(self.state,self.config,generator,reviewer=review)
+        result=run_candidates(self.state,self.config,generator,sam=Segmenter(),reviewer=review)
         self.assertEqual(len(generator.prompts),2)
         self.assertNotEqual(*generator.prompts)
         self.assertIn('Do not change viewpoint',generator.prompts[1])
@@ -154,7 +177,7 @@ class CandidateIntegration(unittest.TestCase):
         layer=self.root/'layer.png'; image=Image.new('RGBA',(80,80))
         ImageDraw.Draw(image).rectangle((12,22,26,48),fill=(220,20,30,255));image.save(layer)
         self.state['decomposed_layers']=[{'asset_path':str(layer),'mock':False}]
-        config=PipelineConfig(object_completion={'enabled':False})
+        config=PipelineConfig(upscale={'enabled':True}, object_completion={'enabled':False})
         result=run_candidates(self.state,config,Generator(),reviewer=Review())
         self.assertEqual(result['objects'][0]['accepted_candidate_id'],'layered_0_v1')
         self.assertEqual(len(result['candidate_registry']['tree_001']['candidates']),2)
@@ -170,12 +193,20 @@ class CandidateIntegration(unittest.TestCase):
             def complete_object(self,*args,**kwargs):
                 return Generator().complete_object(*args,**kwargs)
         class Vision(SceneReviewService):
+            def analyze_occlusion(self,*args):
+                return Review().analyze_occlusion(*args)
             def review_candidate(self,*args,**kwargs):
                 return CandidateQA(status='ACCEPT',scores=scores(),evaluator='test_vision')
         source=self.root/'scene_source.png';Image.new('RGB',(80,80),(20,150,40)).save(source)
-        config=PipelineConfig(object_completion={'enabled':True},candidates={'automatic':False},
+        config=PipelineConfig(upscale={'enabled':True}, object_completion={'enabled':True},candidates={'automatic':False},
                               p1={'enabled':False},scene_loop={'enabled':False},detection={'diagnostics':{'enabled':False}})
-        services=replace(ServiceBundle.create(),image_edit=Edit(),reviewer=Vision())
+        from services.sam_service import SAMService
+        class GraphSAM(SAMService):
+            def segment(self,path,records):
+                if '_canvas' in str(path):
+                    return Segmenter().segment(path,records)
+                return super().segment(path,records)
+        services=replace(ServiceBundle.create(),image_edit=Edit(),reviewer=Vision(),sam=GraphSAM())
         graph=build_graph(config,services,checkpointer=InMemorySaver(),interrupt_before=['complete_objects'])
         run={'configurable':{'thread_id':'p2-accepted'}}
         paused=graph.invoke({'source_path':str(source),'output_dir':str(self.root/'graph')},run)

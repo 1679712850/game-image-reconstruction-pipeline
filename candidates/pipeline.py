@@ -8,14 +8,10 @@ from PIL import Image, ImageDraw
 from app.edits import validate_edit_requests
 from services.execution import operation_span
 from candidates.geometry import source_placement, normalize, rebuild_mask
+from candidates.reconstruction import analyze, prepare, COMPLETION_PROMPT, RETRY_PROMPT, completion_metrics
 from candidates.qa import evaluate, original_qa, retry_prompt, select
 from schemas.candidate import Candidate, CandidateQA, CandidateRegistry
 from diagnostics.p1_report import portable
-
-CONSTRAINTS = (' Preserve object type, structure, orientation, proportions, palette, lighting, rendering style '
-               'and exact original camera angle/isometric perspective. No additional decoration or objects. '
-               'Isolate one complete object on a plain background.')
-
 
 def strategy(obj, config):
     failures = set((obj.get('qa') or {}).get('failure_types', []))
@@ -69,40 +65,45 @@ def run_candidates(state, config, service, sam=None, reviewer=None, runtime=None
         registry = CandidateRegistry(instance_id=ident, source={
             'image_path': obj.get('asset_path'), 'mask_path': obj.get('mask_path'), 'bbox': obj['bbox'],
             'segmented_asset_path': obj.get('source_asset_path'),
-            'segmented_mask_path': obj.get('source_mask_path'),
-            'placement': placement})
+            'segmented_mask_path': obj.get('source_mask_path'), 'placement': placement})
         registries[ident] = registry
         if not obj.get('asset_path'):
-            # Preserve a real empty-mask record; never invent an opaque rectangular object.
             registry.candidates.append(Candidate(candidate_id='original', type='segmentation',
                 qa=CandidateQA(status='REJECT', reasons=[obj.get('error') or 'no visible asset']), placement=placement))
             continue
         registry.candidates.append(Candidate(candidate_id='original', type='segmentation', image_path=obj['asset_path'],
             mask_path=obj.get('mask_path'), placement=placement, qa=original_qa(obj)))
-        if not config.object_completion.enabled:
-            continue
         request = requests.get(ident)
-        kind = 'inpaint' if request else strategy(obj, config.candidates) if config.candidates.automatic else None
+        if not config.object_completion.enabled or not (config.candidates.automatic or request):
+            continue
+        analysis = analyze(obj, state, reviewer)
+        obj.update(occlusion_ratio=analysis.occlusion_ratio, occlusion_directions=analysis.occluded_directions,
+            completion_required=analysis.needs_completion, reconstruction_confidence=analysis.reconstruction_confidence,
+            bbox_visible=obj['crop_bbox'], original_crop_path=obj['asset_path'])
+        kind = 'inpaint' if request else strategy(obj, config.candidates)
+        if analysis.needs_completion and not kind:
+            kind = 'inpaint'
         if not kind:
             continue
-        folder = root/'candidates'/ident; folder.mkdir(parents=True, exist_ok=True)
-        mask = folder/'edit_mask.png'
-        if request:
-            with Image.open(request.mask_path) as image, Image.open(obj['asset_path']) as original:
-                if image.size != original.size or image.convert('L').getbbox() is None:
-                    raise ValueError('Edit mask must be nonempty and match the original cropped asset')
-                image.convert('L').save(mask)
-        else:
-            # Border and holes are local repair targets; the generation is composited through this mask.
-            import cv2
-            with Image.open(obj['asset_path']) as image:
-                alpha = np.array(image.convert('RGBA').getchannel('A'))
-            binary = (alpha > 8).astype(np.uint8)*255
-            kernel = np.ones((5, 5), np.uint8)
-            edge = cv2.dilate(binary, kernel) - cv2.erode(binary, kernel)
-            Image.fromarray(edge if edge.any() else binary).save(mask)
-        prompt = (request.prompt if request else f'Repair the missing parts of this {obj["category"]}.') + CONSTRAINTS
-        jobs.append({'id': ident, 'type': kind, 'prompt': prompt, 'mask': str(mask), 'explicit': bool(request)})
+        folder = root/'candidates'/ident
+        prompt = (request.prompt if request else f'Reconstruct this {obj["category"]}.') + '\n' + COMPLETION_PROMPT
+        try:
+            prepared = prepare(obj, analysis, folder/'plan', config.amodal, request)
+            obj.update(amodal_mask_path=prepared['amodal_mask_path'], expanded_crop_path=prepared['expanded_crop_path'],
+                edit_mask_path=prepared['edit_mask_path'], bbox_full=prepared['bbox_full'],
+                bbox_visible=prepared['bbox_visible'], reconstruction=prepared)
+            prompt += '\nOcclusion reasoning and full-shape constraints: ' + json.dumps(prepared['analysis'], ensure_ascii=False)
+            prompt += '\nSource crop offset in edit canvas: ' + json.dumps(prepared['source_offset'])
+            prompt += '\nEdit canvas size: ' + json.dumps([prepared['canvas_bbox']['w'], prepared['canvas_bbox']['h']])
+        except (ValueError, OSError) as error:
+            registry.candidates.append(Candidate(candidate_id='planning_failed', type=kind,
+                qa=CandidateQA(status='REJECT', reasons=[f'amodal planning failed: {error}'])))
+            continue
+        count = config.amodal.severe_candidates if analysis.occlusion_ratio >= config.candidates.severe_occlusion else 1
+        for variant in range(count):
+            jobs.append({'id': ident, 'type': kind, 'prompt': prompt + f'\nCandidate hypothesis {variant+1}.',
+                'mask': prepared['edit_mask_path'], 'explicit': bool(request), 'analysis': analysis,
+                'prepared': prepared, 'prefix': kind if count == 1 else f'{kind}_c{variant+1}'})
 
     from candidates.layered import layer_jobs
     jobs.extend(layer_jobs(state, objects, root))
@@ -114,63 +115,82 @@ def run_candidates(state, config, service, sam=None, reviewer=None, runtime=None
             ident = job['id']; obj = objects[ident]; registry = registries[ident]
             candidate_id = f'{job.get("prefix", job["type"])}_v{attempt+1}'
             path = root/'candidates'/ident/f'{candidate_id}_raw.png'
-            generation_source = obj.get('source_asset_path') if job['type'] == 'generation' else None
-            generation_source = generation_source or obj['asset_path']
-            job['source'] = generation_source
-            original_geometry = {**obj, 'asset_path': generation_source, 'crop_bbox': obj.get('source_crop_bbox') or obj['crop_bbox'], 'pivot': None}
-            job['placement'] = source_placement(original_geometry) if job['type'] == 'generation' else registry.source['placement']
+            prepared = job.get('prepared')
+            job['source'] = prepared['expanded_crop_path'] if prepared else obj['asset_path']
+            job['placement'] = prepared['placement'] if prepared else registry.source['placement']
             candidate = Candidate(candidate_id=candidate_id, type=job['type'], prompt=job['prompt'], attempt=attempt,
-                                  qa=CandidateQA(status='REJECT', reasons=['generation failed']))
+                qa=CandidateQA(status='REJECT', reasons=['generation failed']))
             registry.candidates.append(candidate)
             try:
                 if runtime:
                     runtime.instance_id, runtime.retry_count = ident, attempt
                 if job.get('existing_path'):
                     raw = job['existing_path']
-                elif job['type'] == 'inpaint' and job['explicit']:
-                    raw = service.complete_object(obj['asset_path'], job['mask'], prompt=job['prompt'], output_path=path)
+                elif job['type'] == 'inpaint':
+                    raw = service.complete_object(job['source'], job['mask'], prompt=job['prompt'], output_path=path)
                 else:
-                    raw = service.generate_object(generation_source, prompt=job['prompt'], output_path=path)
+                    raw = service.generate_object(job['source'], prompt=job['prompt'], output_path=path)
                 candidate.raw_path = raw
                 pending.append((job, candidate))
                 if job['explicit'] and attempt == 0:
-                    edits.append({'object_id': ident, 'source_asset_path': obj['asset_path'], 'mask_path': job['mask'],
-                        'asset_path': raw, 'prompt': job['prompt'], 'crop_bbox': obj['crop_bbox'],
-                        'logical_size': [obj['crop_bbox']['w'], obj['crop_bbox']['h']], 'mock': service.mock,
-                        'status': 'mock_noop' if service.mock else 'manual_review', 'alpha_policy': 'preserve_source'})
+                    box = job['placement']['crop_bbox']
+                    edits.append({'object_id': ident, 'source_asset_path': job['source'], 'mask_path': job['mask'],
+                        'asset_path': raw, 'prompt': job['prompt'], 'crop_bbox': box,
+                        'logical_size': [box['w'], box['h']], 'mock': service.mock,
+                        'status': 'mock_noop' if service.mock else 'manual_review', 'alpha_policy': 'visible_hint' if service.mock else 'pending_segmentation'})
             except Exception as error:
                 candidate.error = str(error); candidate.qa.reasons = [f'generation failed: {error}']
         if runtime:
             runtime.manager.end_stage()
-        # Batch all generated alpha recovery before switching to the QA model.
         for job, candidate in pending:
-            obj = objects[job['id']]; registry = registries[job['id']]
+            obj = objects[job['id']]
             try:
                 if runtime:
                     runtime.instance_id, runtime.retry_count = job['id'], attempt
                 with Image.open(candidate.raw_path) as image:
                     image = image.copy()
-                if image.mode != 'RGBA' or image.getchannel('A').getextrema()[0] == 255:
+                prepared = job.get('prepared')
+                if prepared:
+                    with Image.open(prepared['observed_mask_path']) as visible:
+                        visible = visible.copy()
+                    # Restore canvas coordinates after model resolution rounding.
+                    if image.size != visible.size:
+                        image = image.resize(visible.size, Image.Resampling.LANCZOS)
+                    aligned_path = Path(candidate.raw_path).with_name(candidate.candidate_id+'_canvas.png')
+                    image.save(aligned_path)
+                    from candidates.alpha import recover_alpha
+                    with Image.open(job['source']) as source_image:
+                        mock_noop = bool(service.mock and np.array_equal(np.asarray(image.convert('RGBA')),
+                            np.asarray(source_image.convert('RGBA'))))
+                    image = recover_alpha(image, str(aligned_path), prepared, obj, sam, mock_noop=mock_noop)
+                    metrics, reasons = completion_metrics(image.getchannel('A'), visible, job['analysis'])
+                    candidate.completion = {**metrics, 'reasons': reasons, 'analysis': prepared['analysis'],
+                        'alpha_policy': 'visible_hint' if mock_noop else 'resegmented',
+                        'canvas_bbox': prepared['canvas_bbox'], 'amodal_mask_path': prepared['amodal_mask_path'],
+                        'expanded_crop_path': prepared['expanded_crop_path'], 'edit_mask_path': prepared['edit_mask_path']}
+                elif image.mode != 'RGBA' or image.getchannel('A').getextrema()[0] == 255:
                     if not sam:
                         raise ValueError('Generated RGB candidate requires object segmentation')
                     w, h = image.size
                     masks = sam.segment(candidate.raw_path, [{'id': obj['id'], 'category': obj['category'],
                         'confidence': obj['confidence'], 'bbox': {'x': 0, 'y': 0, 'w': w, 'h': h}}])
-                    mask = np.asarray(masks[0]['mask'], dtype=np.uint8)
+                    from candidates.alpha import refine_alpha
+                    mask = refine_alpha(masks[0]['mask'])
                     if mask.shape != (h, w) or not mask.any():
                         raise ValueError('Generated segmentation is empty or invalid')
                     image = image.convert('RGBA'); image.putalpha(Image.fromarray(mask))
-                # Automatic local repairs preserve source pixels outside the repair region.
-                if job['type'] == 'inpaint' and not job['explicit']:
-                    with Image.open(obj['asset_path']) as original, Image.open(job['mask']) as mask:
-                        image = Image.composite(image.resize(original.size, Image.Resampling.LANCZOS), original.convert('RGBA'), mask.convert('L'))
                 alpha_path = Path(candidate.raw_path).with_name(candidate.candidate_id+'_alpha.png')
                 image.save(alpha_path)
+                if job['explicit'] and attempt == 0:
+                    for edit in edits:
+                        if edit['asset_path'] == candidate.raw_path and not service.mock:
+                            edit.update(asset_path=str(alpha_path), alpha_policy='resegmented')
                 path = alpha_path.with_name(candidate.candidate_id+'.png')
                 with operation_span('candidate.normalize', model='image_edit', instance_id=obj['id']):
                     candidate.image_path, candidate.mask_path, candidate.placement = normalize(
-                        alpha_path, job['source'], job['placement'], path, (state['width'], state['height']), aligned=job['type'] == 'inpaint')
-            except (RuntimeError, ValueError, OSError, IndexError, KeyError) as error:
+                        alpha_path, job['source'], job['placement'], path, (state['width'], state['height']),
+                        aligned=bool(prepared) or job['type'] == 'inpaint', allow_outside_scene=bool(prepared))
+            except Exception as error:
                 candidate.error = str(error); candidate.qa = CandidateQA(status='REJECT', reasons=[f'alpha recovery failed: {error}'])
         if runtime:
             runtime.manager.end_stage()
@@ -182,12 +202,36 @@ def run_candidates(state, config, service, sam=None, reviewer=None, runtime=None
             if runtime:
                 runtime.instance_id, runtime.retry_count = job['id'], attempt
             try:
-                candidate.qa = evaluate(candidate.image_path, job['source'], obj, reviewer, config.candidates)
+                candidate.qa = evaluate(candidate.image_path, obj['asset_path'], obj, reviewer, config.candidates)
+                reasons = candidate.completion.get('reasons', [])
+                if reasons:
+                    candidate.qa.reasons.extend(reasons)
+                    if candidate.qa.status != 'REJECT':
+                        candidate.qa.status = 'RETRY'
+                analysis = job.get('analysis')
+                if analysis and (analysis.evidence != 'vision' or analysis.reconstruction_confidence < config.amodal.confidence_threshold
+                                 or analysis.visible_ratio < .20):
+                    candidate.qa.status = 'RETRY' if candidate.qa.status != 'REJECT' else 'REJECT'
+                    candidate.qa.reasons.append('amodal confidence unavailable or too low; manual review required')
             except Exception as error:
                 candidate.qa = CandidateQA(status='RETRY', reasons=[f'QA unavailable: {error}'])
-            unavailable = any('unavailable' in reason.lower() or 'incomplete' in reason.lower() for reason in candidate.qa.reasons)
+            unavailable = any('unavailable' in reason.lower() or 'incomplete semantic' in reason.lower() or 'manual review required' in reason.lower()
+                              for reason in candidate.qa.reasons)
             if candidate.qa.status == 'RETRY' and not unavailable and attempt < config.resources.max_generation_retry and config.object_completion.enabled:
-                jobs.append({**job, 'existing_path': None, 'prompt': retry_prompt(job['prompt'], candidate.qa.reasons, attempt+1) + CONSTRAINTS})
+                next_job = {**job, 'existing_path': None,
+                    'prompt': retry_prompt(job['prompt'], candidate.qa.reasons, attempt+1) + '\n' + RETRY_PROMPT}
+                if candidate.completion.get('touches_border') and job.get('prepared'):
+                    try:
+                        next_job['prepared'] = prepare(obj, job['analysis'], root/'candidates'/obj['id']/f'canvas_r{attempt+1}',
+                                                       config.amodal, growth=1.5**(attempt+1))
+                        next_job['mask'] = next_job['prepared']['edit_mask_path']
+                        next_job['prompt'] += '\nUpdated canvas coordinates supersede the previous offset: ' + json.dumps({
+                            'source_offset': next_job['prepared']['source_offset'],
+                            'canvas_bbox': next_job['prepared']['canvas_bbox']})
+                    except (ValueError, OSError) as error:
+                        candidate.qa.reasons.append(f'canvas expansion budget: {error}')
+                        continue
+                jobs.append(next_job)
         if runtime:
             runtime.manager.end_stage()
     if runtime:
@@ -199,8 +243,10 @@ def run_candidates(state, config, service, sam=None, reviewer=None, runtime=None
         # If a requested repair failed, keep the source but make that failure visible.
         attempted = registry.candidates[1:]
         manual |= bool(attempted and not any(c.qa.status == 'ACCEPT' for c in attempted))
+        manual |= bool(obj.get('completion_required') and (not chosen or chosen.candidate_id == 'original'))
         registry.needs_manual_review = manual
         obj['needs_manual_review'] = manual
+        obj['asset_library_eligible'] = bool(chosen and chosen.qa.status == 'ACCEPT' and not manual)
         if chosen:
             registry.accepted_asset = chosen.image_path; registry.accepted_candidate_id = chosen.candidate_id
             placement = chosen.placement
@@ -214,7 +260,12 @@ def run_candidates(state, config, service, sam=None, reviewer=None, runtime=None
             obj.update(accepted_asset=chosen.image_path, accepted_candidate_id=chosen.candidate_id,
                 asset_path=chosen.image_path, asset_mask_path=full_mask, mask_path=full_mask, full_mask_path=full_mask,
                 placement=placement, provenance=registry.provenance, crop_bbox=box,
-                pivot=placement['pivot'], z_order=placement['z_order'], hd_asset_path=None)
+                pivot=placement['pivot'], z_order=placement['z_order'], hd_asset_path=None,
+                reconstructed_mask_path=chosen.mask_path if chosen.type != 'segmentation' else None,
+                completion_qa=chosen.completion)
+            if chosen.completion:
+                for key in ('amodal_mask_path', 'expanded_crop_path', 'edit_mask_path'):
+                    obj[key] = chosen.completion[key]
             if manual:
                 obj['status'] = 'manual_review'
             elif chosen.type != 'segmentation':

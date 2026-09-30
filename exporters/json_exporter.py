@@ -8,17 +8,33 @@ from schemas.scene import ExportObject, SceneManifest
 from diagnostics.p1_report import portable
 
 
+
+def export_geometry(record: dict, root: Path) -> dict:
+    """Source-visible bounds and final accepted placement, never an unaccepted proposal."""
+    visible = record.get('bbox_visible') or record.get('bbox')
+    mask = record.get('visible_mask_path') or record.get('source_mask_path')
+    if mask and (root/mask).is_file():
+        from PIL import Image
+        with Image.open(root/mask) as image:
+            bounds = image.convert('L').point(lambda value: 255 if value > 8 else 0).getbbox()
+        visible = {'x':bounds[0],'y':bounds[1],'w':bounds[2]-bounds[0],'h':bounds[3]-bounds[1]} if bounds else None
+    return {'visible_bbox':visible,'visible_mask':mask,
+            'full_asset_bbox':record.get('placement',{}).get('crop_bbox') or record.get('crop_bbox'),
+            'full_asset_canvas':record.get('logical_size'),
+            'full_asset_mask':record.get('reconstructed_mask_path')}
+
 def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | None = None) -> SceneManifest:
     """Replace internal absolute paths with paths relative to scene.json."""
     root = Path(state["output_dir"])
     objects = []
     for record in state.get("objects", []):
         data = dict(record)
+        geometry = export_geometry(data, root)
         for key in ("asset_path", "hd_asset_path", "mask_path", "candidate_mask_path", "visible_mask_path", "full_mask_path"):
             data[key] = relative_asset(data.get(key), root)
         if data.get("accepted_asset"):
             data["asset_path"] = relative_asset(data["accepted_asset"], root)
-        data.update(asset=data["asset_path"], hd_asset=data["hd_asset_path"])
+        data.update(asset=data["asset_path"], hd_asset=data["hd_asset_path"], geometry=geometry)
         objects.append(ExportObject.model_validate(portable(data, root)))
     analysis = state["scene_analysis"]
     preview = state.get("reconstruction_path")
@@ -27,6 +43,10 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         layers.append({**record, "asset_path": relative_asset(record["asset_path"], root)})
     for record in state.get("object_edits", []):
         data = dict(record)
+        # Older checkpoints may carry the retired label; normalize metadata while
+        # keeping the actual candidate alpha/resegmentation contract current.
+        if data.get('alpha_policy') == 'preserve_source':
+            data['alpha_policy'] = 'visible_hint'
         for key in ("asset_path", "source_asset_path", "mask_path"):
             data[key] = relative_asset(data[key], root)
         edits.append(data)
@@ -38,7 +58,11 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         decomposed_layers=layers, object_edits=edits,
         objects=[obj for obj in objects if obj.group != "fx_environment"],
         environment_effects=[obj for obj in objects if obj.group == "fx_environment"],
-        detection={"rounds": [{key: run.get(key) for key in ("round", "global_candidates", "tile_candidates", "combined_candidates", "after_dedup", "after_filter", "failed_tiles", "small_object_report")} for run in state.get("detection_runs", [])],
+        detection={"instances": portable(state.get('all_detections', state.get('detections', [])), root), "object_limit": {
+            "truncated": any(run.get('object_limit',{}).get('truncated',False) for run in state.get('detection_runs',[])),
+            "objects_before_limit":sum(run.get('object_limit',{}).get('objects_before_limit',0) for run in state.get('detection_runs',[])),
+            "objects_after_limit":sum(run.get('object_limit',{}).get('objects_after_limit',0) for run in state.get('detection_runs',[])),
+        }, "budget": state.get("detection_budget", {}), "rounds": [{key: run.get(key) for key in ("budget", "scan_cost", "round", "global_candidates", "tile_candidates", "combined_candidates", "after_dedup", "after_filter", "failed_tiles", "small_object_report")} for run in state.get("detection_runs", [])],
                    "review_candidate_pool": [c for run in state.get("detection_runs", []) for c in run.get("review_candidate_pool", [])]},
         retry_count=state.get("retry_count", 0),
         retry_history=portable(state.get("retry_history", []), root),
@@ -58,6 +82,8 @@ def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | Non
         candidate_registry=portable(state.get("candidate_registry", {}), root),
         psd=relative_asset(state.get("psd_path"), root),
         p1_summary=portable(state.get('p1_summary', {}), root),
+        completion_metrics=portable(state.get('completion_metrics', {}), root),
+        pipeline_status=state.get('pipeline_status', 'completed'),
     )
 
 

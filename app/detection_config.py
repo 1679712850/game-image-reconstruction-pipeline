@@ -1,4 +1,5 @@
 """Independent P0 detection settings; model options remain in models.yaml."""
+import warnings
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -49,6 +50,21 @@ class DiagnosticsConfig(Settings):
     enabled: bool = True
 
 
+class DetectionBudget(Settings):
+    """Finite per-run inference budget shared by global, tile and recovery passes."""
+    max_global_passes: int = Field(default=1, ge=0)
+    max_tile_passes: int = Field(default=2, ge=0)
+    max_categories_per_pass: int = Field(default=6, ge=1)
+    max_total_inference_calls: int = Field(default=2000, ge=1)
+    max_retry_calls: int = Field(default=100, ge=0)
+
+
+class CategoryPlannerConfig(Settings):
+    enabled: bool = True
+    max_groups_per_tile: int = Field(default=4, ge=1)
+    preserve_scene_categories: bool = True
+
+
 class DetectionConfig(Settings):
     global_detection: GlobalDetectionConfig = Field(default_factory=GlobalDetectionConfig, alias="global")
     tiling: TilingConfig = Field(default_factory=TilingConfig)
@@ -57,8 +73,23 @@ class DetectionConfig(Settings):
     dedup: DedupConfig = Field(default_factory=DedupConfig)
     truncation: TruncationConfig = Field(default_factory=TruncationConfig)
     diagnostics: DiagnosticsConfig = Field(default_factory=DiagnosticsConfig)
+    budget: DetectionBudget = Field(default_factory=DetectionBudget)
+    category_planner: CategoryPlannerConfig = Field(default_factory=CategoryPlannerConfig)
     expand_categories: bool = True
     prompt_group_size: int = Field(default=6, ge=1, le=32)
+
+    @model_validator(mode="before")
+    @classmethod
+    def aliases(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        for alias, active in [('tiled','tiling'),('multiscale','multi_scale')]:
+            if alias in value:
+                warnings.warn(f'detection.{alias} is deprecated; use detection.{active}', DeprecationWarning, stacklevel=2)
+                old = value.pop(alias)
+                value[active] = {**old, **value.get(active,{})}
+        return value
 
     @model_validator(mode="after")
     def validate_scales(self):

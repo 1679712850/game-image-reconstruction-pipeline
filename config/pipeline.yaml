@@ -22,9 +22,13 @@ qa:
   min_occupancy: 0.08
   max_mask_outside_bbox: 0.35
 upscale:
-  enabled: true
+  enabled: false
+  required: false
 reconstruction:
   enabled: true
+export:
+  memory_budget_mb: 2048
+  low_memory: true
 scene_loop:
   enabled: true
   max_rounds: 3
@@ -39,6 +43,14 @@ layer_decomposition:
   enabled: false
 object_completion:
   enabled: false
+amodal:
+  context_padding: 0.30
+  severe_padding: 0.60
+  minimum_padding: 32
+  max_canvas_edge: 4096
+  max_canvas_pixels: 16777216
+  confidence_threshold: 0.65
+  severe_candidates: 3
 
 # High-recall P0 detection. These settings supersede legacy grounding tiling/NMS
 # options for the LangGraph pipeline; model prompts/device still use models.yaml.
@@ -53,6 +65,16 @@ detection:
   multi_scale:
     enabled: true
     scales: [1024, 1536]
+  category_planner:
+    enabled: true
+    max_groups_per_tile: 4
+    preserve_scene_categories: true
+  budget:
+    max_global_passes: 1
+    max_tile_passes: 2
+    max_categories_per_pass: 6
+    max_total_inference_calls: 2000
+    max_retry_calls: 100
   expand_categories: true
   prompt_group_size: 6
   confidence:
@@ -104,5 +126,5 @@ resources:
 cache:
   enabled: true
   directory: null  # output_dir/cache; set an absolute path for shared task caches
-  pipeline_version: p2-v1
-  prompt_version: p2-candidate-v1
+  pipeline_version: engineering-v1.2
+  prompt_version: amodal-candidate-v1

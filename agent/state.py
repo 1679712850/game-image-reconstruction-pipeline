@@ -18,7 +18,7 @@ class SceneState(TypedDict, total=False):
     retry_count: int
     max_retry: int
     reconstruction_path: str
-    reconstruction_score: float
+    reconstruction_score: float | None
     scene_json: str
     exported_assets: list[str]
     decomposed_layers: list[dict]
@@ -38,6 +38,7 @@ class SceneState(TypedDict, total=False):
     scene_stop_reason: str
     detection_diagnostics: dict
     detection_runs: list[dict]
+    detection_budget: dict
     total_retry_count: int
     all_detections: list[dict]
     ownership: dict
@@ -47,6 +48,9 @@ class SceneState(TypedDict, total=False):
     detection_coverage_review: dict
     p1_thresholds: dict
     p1_summary: dict
+    completion_metrics: dict
+    pipeline_status: str
+    mask_metrics: dict
 
     candidate_registry: dict
     performance_report_path: str

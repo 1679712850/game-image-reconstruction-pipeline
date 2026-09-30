@@ -1,0 +1,2 @@
+# Optional neural Stage B. Supply local RealESRGAN_x4plus.pth in models.yaml.
+torch>=2.6,<3

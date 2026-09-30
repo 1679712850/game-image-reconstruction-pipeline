@@ -19,8 +19,17 @@ class BBox(BaseModel):
 class Pivot(BaseModel):
     """Ground contact point in the original crop's pixel space."""
 
-    x: float = Field(ge=0)
-    y: float = Field(ge=0)
+    x: float
+    y: float
+
+
+class AssetBBox(BaseModel):
+    """Unclipped asset placement; source detection boxes still use BBox."""
+    model_config = ConfigDict(extra='forbid')
+    x: int
+    y: int
+    w: int = Field(gt=0)
+    h: int = Field(gt=0)
 
 
 class SceneObject(BaseModel):
@@ -48,7 +57,7 @@ class SceneObject(BaseModel):
     confidence_threshold: float | None = Field(default=None, ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
     bbox: BBox
-    crop_bbox: BBox | None = None
+    crop_bbox: AssetBBox | None = None
     mask_path: str | None = None
     asset_path: str | None = None
     source_asset_path: str | None = None
@@ -82,6 +91,27 @@ class SceneObject(BaseModel):
     candidate_mask_path: str | None = None
     visible_mask_path: str | None = None
     full_mask_path: str | None = None
+    amodal_mask_path: str | None = None
+    expanded_crop_path: str | None = None
+    edit_mask_path: str | None = None
+    bbox_visible: BBox | None = None
+    bbox_full: AssetBBox | None = None
+    reconstruction: dict = Field(default_factory=dict)
+    hd_qa: dict = Field(default_factory=dict)
+    base_asset_status: Literal["ready", "needs_review", "rejected"] = "needs_review"
+    enhancement_status: Literal["disabled", "ready", "preview_only", "skipped", "unavailable", "failed"] = "disabled"
+    enhancement: dict = Field(default_factory=dict)
+    review: dict = Field(default_factory=dict)
+    geometry: dict = Field(default_factory=dict)
+    accepted_visible_mask_path: str | None = None
+    reconstructed_mask_path: str | None = None
+    original_crop_path: str | None = None
+    asset_library_eligible: bool = False
+    occlusion_ratio: float = Field(default=0, ge=0, le=1)
+    occlusion_directions: list[str] = Field(default_factory=list)
+    completion_required: bool = False
+    reconstruction_confidence: float = Field(default=0, ge=0, le=1)
+    completion_qa: dict = Field(default_factory=dict)
     segmentation: dict = Field(default_factory=dict)
     ownership_priority: int = 0
     occludes: list[str] = Field(default_factory=list)

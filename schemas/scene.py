@@ -1,7 +1,7 @@
 """Scene understanding and portable export schema."""
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from schemas.object import SceneObject
 from schemas.generation import LayerAsset, ObjectEditResult
@@ -34,7 +34,17 @@ class ExportObject(SceneObject):
 class SceneManifest(BaseModel):
     """Versioned manifest with explicit mock and review information."""
 
-    schema_version: str = "1.1"
+    @model_validator(mode='before')
+    @classmethod
+    def load_version(cls, value: object) -> object:
+        if isinstance(value, dict) and value.get('schema_version') == '1.1':
+            from schemas.migration import normalize_manifest
+            return normalize_manifest(value)
+        if isinstance(value, dict) and value.get('schema_version', '1.2') != '1.2':
+            raise ValueError('Unsupported schema; expected 1.1 or 1.2')
+        return value
+
+    schema_version: str = "1.2"
     mock: bool
     backends: dict[str, str] = Field(default_factory=dict)
     scene: SceneInfo
@@ -60,3 +70,5 @@ class SceneManifest(BaseModel):
     candidate_registry: dict = Field(default_factory=dict)
     psd: str | None = None
     p1_summary: dict = Field(default_factory=dict)
+    completion_metrics: dict = Field(default_factory=dict)
+    pipeline_status: Literal["completed", "completed_with_review", "partial", "failed"] = "completed"

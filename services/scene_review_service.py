@@ -42,7 +42,7 @@ class SceneReviewService:
         self._llm = client
 
     def _image(self, path: str) -> dict:
-        image = read_rgba(path).convert("RGB")
+        image = read_rgba(path)
         image.thumbnail((self.config.image_long_edge, self.config.image_long_edge))
         buffer = BytesIO()
         image.save(buffer, "PNG")
@@ -93,5 +93,33 @@ class SceneReviewService:
                 'shape, style, perspective, scale, color, lighting, edge, background_leak (lower is better), '
                 'occlusion_reconstruction_quality, semantic. Check exact orientation, object type, proportions, '
                 'palette, lighting, isometric angle, background contamination and extra decoration. '
+                'For object_completion check abrupt cuts, unnatural flat occlusion boundaries, incomplete trunks, roofs, '
+                'walls, textures, and remnants or shadows of unrelated occluders. Compare retained visible landmarks. '
+                'For high_resolution_restoration require identical silhouette, colors and proportions, recovered line work '
+                'and material textures, no blur, noise, ringing, oversharpening, smooth AI look or style drift. '
                 'Give specific failure reasons. evaluator must be vision_llm.'),
             HumanMessage(content=[{'type': 'text', 'text': json.dumps(context)}, self._image(original), self._image(candidate)])]))
+
+    def analyze_occlusion(self, source: str, crop: str, context: dict):
+        """Return a bounded amodal prediction. Rules mode records uncertainty."""
+        from schemas.reconstruction import OcclusionAnalysis
+        if self.backend != 'llm':
+            return OcclusionAnalysis(object_id=context['id'], object_type=context['category'],
+                occlusion_ratio=float(context.get('occluded_pixel_count') or 0) /
+                    max(1, (context.get('visible_pixel_count') or 0) + (context.get('occluded_pixel_count') or 0)),
+                reconstruction_confidence=0, needs_completion=bool(context.get('occluded_pixel_count') or context.get('is_truncated') or context.get('requires_inpainting')),
+                evidence='unavailable', boundary_reasoning='Configure a vision reviewer for semantic amodal masks')
+        self.validate_ready()
+        from langchain_core.messages import HumanMessage, SystemMessage
+        prompt = '''Analyze visible versus occlusion boundaries for one isolated 2D game asset crop.
+Return OcclusionAnalysis. Infer a complete amodal silhouette as polygons in normalized crop coordinates;
+polygons may extend beyond [0,1] but must stay within [-2,3]. Distinguish object boundaries from foreground
+occluders using category, perspective, texture continuation, symmetry and neighboring objects. Never include
+occluders in the target. Set needs_completion false only when the visible object is complete. Confidence below
+0.65 means the result should go to manual review. Report object_id and object_type from the context.
+Set evidence=vision. max_expansion_ratio is full-mask area divided by visible-mask area; choose it using
+category, scale, occlusion severity and perspective, allowing uncertainty without unbounded invention.
+Return full_shape_polygons for the entire completed outline, not only the missing patches.'''
+        response = self._llm.with_structured_output(OcclusionAnalysis).invoke([SystemMessage(content=prompt), HumanMessage(content=[
+            {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)}, self._image(source), self._image(crop)])])
+        return OcclusionAnalysis.model_validate(response)

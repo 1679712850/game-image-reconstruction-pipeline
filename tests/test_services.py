@@ -33,12 +33,12 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(image.size, (1, 1))
                 self.assertEqual(image.getpixel((0, 0)), (20, 60, 40, 255))
 
-    def test_real_bundle_uses_configured_analysis_and_lanczos(self) -> None:
+    def test_real_bundle_uses_configured_analysis_and_neural_upscale(self) -> None:
         services = ServiceBundle.create(mock=False)
         self.assertIn("Configured", services.vlm.analyze_scene("unused.png").description)
         self.assertEqual(services.grounding.detect("unused.png", []), [])
         self.assertEqual(services.sam.segment("unused.png", []), [])
-        self.assertEqual(services.upscale.backend, "lanczos")
+        self.assertEqual(services.upscale.backend, "real_esrgan")
         self.assertEqual(services.provenance()["segmentation"], "sam2_official")
         self.assertIsNone(services.grounding._model)
         self.assertIsNone(services.sam._predictor)

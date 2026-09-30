@@ -22,7 +22,7 @@ assign_ownership → select_candidates（启用生成时名称为 complete_objec
 
 SceneObject.accepted_asset 是最终权威路径；asset_path 和 manifest 的 asset 同步指向它。Registry 保留全部候选、原图、mask、bbox、QA、失败理由和选择记录。source_asset_path/source_mask_path/source_crop_bbox 保留 P1 可见裁剪前的分割证据。
 
-完整生成结果先裁到有效 alpha，再按源物体比例归一化，恢复原 ground anchor；局部编辑裁透明边时只改变 crop offset，不重新缩放未编辑像素。placement 保留原 bbox、center、anchor、scale、rotation、z_order、depth、mask_position。RGB 生成图必须经 SAM 恢复 alpha，不能直接把旧 SAM mask 贴在生成图上。
+完整生成结果先裁到有效 alpha，保留扩展画布像素尺度和偏移，不缩回源 bbox；局部编辑裁透明边时只改变 crop offset，不重新缩放未编辑像素。placement 保留原 bbox、center、anchor、scale、rotation、z_order、depth、mask_position。RGB 生成图必须经 SAM 恢复 alpha，不能直接把旧 SAM mask 贴在生成图上。
 
 最终 asset_mask_path/full_mask_path/mask_path 从已采纳 alpha 重建；accepted_ownership 用新 mask 和显式 occludes → z_order 顺序生成最终可见归属。原 ownership 仍是源图分割覆盖诊断，二者定义明确区分。PNG 合成、PSD 图层、高清纹理均消费 accepted_asset。P1 的 terrain/residual 层保留其来源属性。重建差异是源图像素差异诊断，修复隐藏区域后不要求与源图完全一致。
 
@@ -83,3 +83,5 @@ OOM 先卸载非活跃模型，再切 CPU、降低输入分辨率并有限重试
 ## 验证边界
 
 自动测试和 Mock CLI 验证候选回接、坐标/alpha、PNG/PSD 一致性、重试与缓存/资源恢复。资源测试使用可控内存快照和模型替身验证 CUDA 决策分支；没有在本机运行真实 CUDA/Qwen。Qwen 真实输出质量、视觉端点质量、各权重的实际显存峰值仍需要对应环境验收。
+
+模型指纹现在按 task/config 缓存元数据快照，权重不做内容 hash。PSD 改为 alpha bounds 裁剪 + signed offset + 单层解码 + 临时通道文件，避免全部图层 bytes 同时驻留；仍需一个 merged canvas。配置/预算和报告定义见 [ENGINEERING_EVALUATION.md](ENGINEERING_EVALUATION.md)。

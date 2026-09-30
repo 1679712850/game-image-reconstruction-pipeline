@@ -54,12 +54,14 @@ class QwenPipelineTests(unittest.TestCase):
         self.assertLess(visits.index("complete_objects"), visits.index("upscale_objects"))
         json.dumps(result)
         manifest = SceneManifest.model_validate_json(Path(result["scene_json"]).read_text())
-        self.assertEqual(manifest.schema_version, "1.1")
+        self.assertEqual(manifest.schema_version, "1.2")
         self.assertEqual(manifest.backends["object_completion"], "mock_noop")
         self.assertEqual(manifest.decomposed_layers[0].status, "mock_passthrough")
         edit = manifest.object_edits[0]
         self.assertEqual(edit.status, "mock_noop")
-        self.assertEqual(edit.crop_bbox.model_dump(), obj["crop_bbox"])
+        self.assertGreater(edit.crop_bbox.w, obj["crop_bbox"]["w"])
+        self.assertGreater(edit.crop_bbox.h, obj["crop_bbox"]["h"])
+        self.assertEqual(edit.alpha_policy, "visible_hint")
         root = Path(result["output_dir"])
         for path in (edit.asset_path, edit.source_asset_path, edit.mask_path, manifest.decomposed_layers[0].asset_path):
             self.assertFalse(Path(path).is_absolute())

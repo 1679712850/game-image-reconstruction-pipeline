@@ -32,6 +32,9 @@ def fingerprint(value):
         try:
             path = Path(value)
             if path.is_file():
+                if path.suffix.lower() in {'.pth','.pt','.bin','.safetensors'}:
+                    stat = path.stat()
+                    return {'model_file':str(path.resolve()),'size':stat.st_size,'mtime_ns':stat.st_mtime_ns}
                 return {'file': digest(path.read_bytes())}
         except OSError:
             pass

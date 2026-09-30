@@ -34,7 +34,7 @@ class ServiceBundle:
             return cls(
                 vlm=ConfiguredSceneService(options),
                 grounding=GroundingService(False, options), sam=SAMService(False, options),
-                upscale=UpscaleService(False, backend="lanczos"),
+                upscale=UpscaleService(False, config=options),
                 layered=QwenLayeredService(False, options), image_edit=ImageEditService(False, options),
                 reviewer=SceneReviewService(reviewer_backend, options.scene_reviewer),
             )

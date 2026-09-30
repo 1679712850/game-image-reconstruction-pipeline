@@ -1,4 +1,4 @@
-"""Prompt-based Qwen image editing with a deterministic local compositing mask."""
+"""Prompt-based image editing with a separate visible hint and reconstructed alpha."""
 from pathlib import Path
 
 from PIL import Image
@@ -7,6 +7,7 @@ from app.models import ModelConfig
 from app.paths import read_rgba
 from services.execution import operation_span
 from services.qwen_support import load_local_pipeline, local_pipeline_path, inference_image
+import hashlib
 
 
 class ImageEditService:
@@ -31,18 +32,24 @@ class ImageEditService:
             )
 
     def analyze_occlusion(self, objects: list[dict]) -> list[dict]:
-        """Occlusion diagnosis remains a future CV/VLM decision, not edit inference."""
-        if self.mock:
-            return []
-        raise NotImplementedError("TODO: CV/VLM occlusion diagnosis; provide explicit edit requests")
+        """Return conservative, serializable occlusion evidence for each visible object."""
+        from candidates.reconstruction import analyze
+        state = {'objects': objects, 'source_path': objects[0].get('source_path', '') if objects else ''}
+        results = []
+        for obj in objects:
+            if not obj.get('asset_path'):
+                continue
+            result = analyze(obj, state, None)
+            results.append(result.model_dump(mode='json'))
+        return results
 
     def complete_object(
         self, image_path: str, mask_path: str, *, prompt: str, output_path: str | Path,
     ) -> str:
-        """Edit RGB inside a crop-space mask and preserve source alpha/size exactly.
+        """Return model RGB on the supplied canvas for independent segmentation.
 
-        The mask controls local compositing, not model conditioning. New silhouettes
-        require a later segmentation/review stage; this method does not infer alpha.
+        QwenImageEditPipeline has no native mask argument. The permission mask is
+        used only for RGB compositing. No source alpha is applied to a real output.
         """
         if not prompt.strip():
             raise ValueError("An explicit nonempty edit prompt is required")
@@ -50,7 +57,7 @@ class ImageEditService:
         with Image.open(Path(mask_path)) as image:
             mask = image.convert("L")
         if mask.size != source.size:
-            raise ValueError("Edit mask size must match the original cropped asset, not the scene or HD texture")
+            raise ValueError("Edit mask size must match the edit canvas, not the scene or HD texture")
         if mask.getbbox() is None:
             raise ValueError("Edit mask is empty")
         target = Path(output_path).expanduser().resolve()
@@ -61,10 +68,11 @@ class ImageEditService:
         else:
             self.load()
             settings = self.config.qwen_image_edit
-            generator = self._torch.Generator(device="cpu").manual_seed(settings.seed)
+            seed = (settings.seed + int(hashlib.sha256(prompt.encode()).hexdigest()[:8], 16)) % (2**32)
+            generator = self._torch.Generator(device="cpu").manual_seed(seed)
             with self._torch.inference_mode():
                 result = self._pipeline(
-                    image=inference_image(self, source.convert("RGB")), prompt=prompt.strip(),
+                    image=inference_image(self, source), prompt=prompt.strip(),
                     negative_prompt=settings.negative_prompt, true_cfg_scale=settings.true_cfg_scale,
                     num_inference_steps=settings.num_inference_steps,
                     generator=generator, num_images_per_prompt=1, output_type="pil",
@@ -75,8 +83,7 @@ class ImageEditService:
                 candidate = result.images[0].convert("RGB")
                 if candidate.size != source.size:
                     candidate = candidate.resize(source.size, Image.Resampling.LANCZOS)
-                edited = Image.composite(candidate, source.convert("RGB"), mask).convert("RGBA")
-                edited.putalpha(source.getchannel("A"))
+                edited = Image.composite(candidate, source.convert("RGB"), mask)
         with operation_span("image_edit.save", model="image_edit"):
             target.parent.mkdir(parents=True, exist_ok=True)
             edited.save(target, format="PNG")
@@ -96,10 +103,11 @@ class ImageEditService:
             self.load()
             settings = self.config.qwen_image_edit
             with self._torch.inference_mode():
-                result = self._pipeline(image=inference_image(self, source.convert('RGB')), prompt=prompt,
+                result = self._pipeline(image=inference_image(self, source), prompt=prompt,
                     negative_prompt=settings.negative_prompt, true_cfg_scale=settings.true_cfg_scale,
                     num_inference_steps=settings.num_inference_steps,
-                    generator=self._torch.Generator(device='cpu').manual_seed(settings.seed),
+                    generator=self._torch.Generator(device='cpu').manual_seed(
+                        (settings.seed + int(hashlib.sha256(prompt.encode()).hexdigest()[:8], 16)) % (2**32)),
                     num_images_per_prompt=1, output_type='pil')
             if not isinstance(result.images, (list, tuple)) or len(result.images) != 1 or not isinstance(result.images[0], Image.Image):
                 raise ValueError('Qwen must return exactly one PIL image')

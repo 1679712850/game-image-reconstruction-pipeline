@@ -1,4 +1,4 @@
-# Real mode: configured semantics + Grounding DINO + official SAM 2 + Lanczos.
+# Real mode: configured semantics + Grounding DINO + SAM 2 + optional neural restoration.
 # Paths are relative to this YAML. CPU is portable; MPS is opt-in.
 device: auto
 cache_dir: ../.cache/models
@@ -56,6 +56,15 @@ scene_reviewer:
   timeout: 60
   max_retries: 1
   image_long_edge: 1536
+
+# Real Stage B needs local RealESRGAN_x4plus weights and requirements-upscale.txt.
+# Missing weights are reported per asset, never silently replaced with interpolation.
+# backend: lanczos is an explicit preview-only option.
+upscale:
+  backend: real_esrgan
+  checkpoint: null
+  tile: 256
+  tile_pad: 16
 
 # Optional local-only Qwen adapters. Leave model_path null to keep them unloaded.
 qwen_layered:

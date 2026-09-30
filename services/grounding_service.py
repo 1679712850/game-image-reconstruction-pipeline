@@ -81,7 +81,10 @@ class GroundingService:
         if cfg.include_full_image:
             windows = list(dict.fromkeys([full, *windows]))
         candidates, scans = [], []
-        groups = [categories[i:i + cfg.prompt_group_size] for i in range(0, len(categories), cfg.prompt_group_size)]
+        from services.execution import _active
+        runtime = _active.get()
+        group_size = min(cfg.prompt_group_size,runtime.config.detection.budget.max_categories_per_pass) if runtime else cfg.prompt_group_size
+        groups = [categories[i:i+group_size] for i in range(0,len(categories),group_size)]
         for window in windows:
             for group in groups:
                 found = self._infer_image(image.crop(window), group, box_threshold, text_threshold)

@@ -1,5 +1,6 @@
 """Adapter-neutral prompt scheduling, with each failed scan isolated."""
 import logging
+import time
 from taxonomy.categories import category_group
 from taxonomy.prompt_groups import groups_for
 
@@ -29,18 +30,30 @@ def grouped_categories(categories, size):
 
 
 def scan_window(image, window, categories, infer, collect, scans, *, source, tile_id=None,
-                group_size=6, parent_id=None):
+                group_size=6, parent_id=None, budget=None, pass_id=None, scale=None,
+                allowed_groups=None):
     for group_name, group in grouped_categories(categories, group_size):
+        if allowed_groups is not None and group_name not in allowed_groups:
+            continue
+        if budget is not None and not budget.consume(source):
+            scans.append({"source": source, "tile_id": tile_id, "window": list(window),
+                          "group": group_name, "categories": group, "status": "budget_exhausted",
+                          "candidates": 0, "pass_id": pass_id, "scale": scale})
+            continue
         context = {"source": source, "tile_id": tile_id, "window": list(window),
                    "group": group_name, "categories": group, "parent_id": parent_id,
+                   "pass_id": pass_id or source, "scale": scale,
                    "instruction": TILE_INSTRUCTION if source != "global" else "Find whole scene objects and terrain with global context."}
+        started = time.perf_counter()
         try:
             found = infer(image.crop(window), group, context)
+            context["runtime"] = time.perf_counter()-started
             scan = {**context, "status": "ok", "candidates": len(found)}
             for item in found:
                 collect(item, context)
         except Exception as error:
             scan = {**context, "status": "failed", "candidates": 0, "error": f"{type(error).__name__}: {error}"}
             logging.getLogger(__name__).warning("[%s] tile=%s group=%s failed: %s", "GlobalDetection" if source == "global" else "TileDetection", tile_id, group_name, error)
+        scan["runtime"] = time.perf_counter()-started
         scans.append(scan)
         logging.getLogger(__name__).info("[%s] tile=%s group=%s objects=%s", "GlobalDetection" if source == "global" else "TileDetection", tile_id, group_name, scan["candidates"])

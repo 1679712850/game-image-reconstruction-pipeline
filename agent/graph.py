@@ -67,6 +67,13 @@ def build_graph(
     if options.object_completion.enabled:
         adapters.image_edit.validate_ready()
 
+    if not options.mock:
+        import warnings
+        legacy = set(adapters.grounding.config.grounding.model_fields_set) & {
+            'tiled','tile_size','tile_overlap','include_full_image','prompt_group_size','max_detections','box_threshold'}
+        if legacy:
+            warnings.warn('models.grounding legacy discovery options ignored by detect_p0: '+', '.join(sorted(legacy))+
+                          '; use pipeline.detection. Legacy detect/detect_round calls retain their behavior.', DeprecationWarning, stacklevel=2)
     runtime = ExecutionRuntime(options, adapters)
 
     def initialize(state: SceneState) -> dict:
@@ -92,7 +99,7 @@ def build_graph(
         "crop_objects": make_crop_objects(options.crop),
         "qa_objects": make_qa_objects(options),
         "retry_objects": make_retry_objects(options, adapters.sam, reviewer, adapters.grounding),
-        "upscale_objects": make_upscale_objects(adapters.upscale, options.upscale.enabled),
+        "upscale_objects": make_upscale_objects(adapters.upscale, options.upscale.enabled, reviewer, options.candidates, options.upscale.required),
         "build_metadata": build_metadata,
         "reconstruct_scene": make_reconstruct_scene(options.reconstruction.enabled, options.p1),
         "export": make_export(options.mock, {
@@ -100,8 +107,9 @@ def build_graph(
                 layered_enabled=options.layer_decomposition.enabled,
                 image_edit_enabled=options.object_completion.enabled,
             ),
-            **({"upscale": "disabled"} if not options.upscale.enabled else {}),
-        }, diagnostics_enabled=options.detection.diagnostics.enabled, psd_enabled=options.candidates.export_psd),
+            **({"upscale": "disabled"} if options.upscale.enabled is False else {}),
+        }, diagnostics_enabled=options.detection.diagnostics.enabled, psd_enabled=options.candidates.export_psd,
+        export_config=options.export),
     }
     if options.p1.enabled:
         nodes['p1_scene'] = make_p1_scene(options, adapters.grounding, adapters.sam, reviewer)

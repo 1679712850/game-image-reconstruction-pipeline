@@ -22,11 +22,9 @@ def accepted_ownership(objects, root, size):
         visible = (owner == indices[obj['id']]).astype(np.uint8)*255
         path_mask = Path(root)/'accepted_masks'/f"{obj['id']}_visible.png"
         Image.fromarray(visible).save(path_mask)
-        obj['visible_mask_path'] = str(path_mask.resolve())
+        obj['accepted_visible_mask_path'] = str(path_mask.resolve())
         with Image.open(obj['asset_mask_path']) as image:
             full_pixels = int((np.asarray(image) > 8).sum())
-        obj['visible_pixel_count'] = int((visible > 0).sum())
-        obj['ownership_pixel_count'] = obj['visible_pixel_count']
-        obj['occluded_pixel_count'] = max(0, full_pixels-obj['visible_pixel_count'])
+        obj['ownership_pixel_count'] = int((visible > 0).sum())
     return {'owner_map_path': str(path.resolve()), 'owner_ids': indices,
             'definition': 'Accepted asset alpha with explicit occlusion edges then source depth; separate from source segmentation coverage.'}

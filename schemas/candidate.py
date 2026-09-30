@@ -24,6 +24,7 @@ class Candidate(BaseModel):
     qa: CandidateQA
     placement: dict = Field(default_factory=dict)
     error: str | None = None
+    completion: dict = Field(default_factory=dict)
 
 
 class CandidateRegistry(BaseModel):

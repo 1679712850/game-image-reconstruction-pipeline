@@ -345,3 +345,13 @@ CPU 已实测，CUDA/MPS 尚未实测；MPS 为显式可选路径。
 模型只接收 RGB 和提示词；原 alpha 不变，因此不支持生成新的完整物体轮廓。
 遮挡诊断、生成后的 SAM 重分割、图层语义/所有权映射和候选采纳仍待实现。
 本轮没有改变检测提示词、阈值或增加切片检测，不宣称提升漏检召回率。
+
+## 2026-09-30：遮挡重建与独立高清阶段
+
+- 移除真实 Image Edit 的 source-alpha 回贴。输出 RGB 必须经过生成图分割；没有 segmenter 的生成候选不得通过。
+- 增加结构化视觉遮挡分析、amodal 多边形、透明扩展画布、源/新 mask 解耦、未扩张重试、贴边画布增长、扩张上限、可见像素保留检查、多候选和低置信度门槛。
+- 完整 PNG 可以越过原场景边缘；场景 mask/预览才裁剪。PSD 保留独立图层，原 visible mask 不被 ownership 覆写。
+- 接入本地 RealESRGAN_x4plus 权重兼容的 RRDBNet 与带 padding 分块推理，2x/4x 高清输出使用重建后的 alpha。视觉 QA 失败、异常或权重缺失时保留 native 图，不把插值称为真实高清修复。
+- 新增 `tests/test_amodal_reconstruction.py`：树/山体/建筑/柱子的软件契约、面积扩张、重试、边界、细线/软边缘、置信度、分割缺失、神经后端输出轮廓、分块拼接、RRDB checkpoint 键名、高清 QA 故障隔离。旧测试中的固定 alpha、原裁剪框和 3x/1x 缩放断言按新契约调整。
+- 完整 suite：` .venv/bin/python -m unittest discover -s tests -q `；配置 YAML 校验与 `git diff --check` 通过。详细模型配置与约束见 `docs/AMODAL_RECONSTRUCTION.md`。
+- 真实质量边界：本次没有 Qwen/Real-ESRGAN 预训练权重推理；两个本地模型路径未配置。测试使用可控视觉/生成/分割替身，RRDB/tile 验证使用 PyTorch 架构/数值检查。不能以此声称已完成真实树根、山体纹理、屋顶透视和高清美术效果验收。

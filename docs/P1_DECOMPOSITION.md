@@ -6,7 +6,7 @@ The default graph runs source-coordinate classification and local refinement dur
 
 The classifier labels each record as `terrain`, `instance`, `hybrid`, or `effect`. Terrain observations with the same semantic category share one Owner and are written under `terrain/`. Objects retain `candidate_mask_path`, `visible_mask_path`, and `full_mask_path`; the current implementation never fabricates an amodal `full_mask_path`.
 
-`metadata/ownership.json` records the integer source-coordinate ownership map, conflict decisions, semantic `unassigned_ratio`, visible coverage, overlap diagnostics, and the explicit `unclassified_residual` fallback. Residual pixels can make a reconstruction visually complete while remaining semantic failures, so they are excluded from the coverage metric. `metadata/summary.json` contains the run-level detection, terrain, QA, retry, and reconstruction report.
+`metadata/ownership.json` records the integer source-coordinate ownership map, conflict decisions, predicted semantic `unassigned_ratio`, visible coverage, overlap diagnostics, and the explicit `unclassified_residual` fallback. Residual pixels can make a reconstruction visually complete while remaining semantic failures, so they are excluded from the coverage metric. `metadata/summary.json` contains the run-level detection, terrain, QA, retry, and reconstruction report.
 
 The retry manager classifies failures as `MISSED_DETECTION`, `BAD_MASK`, `BACKGROUND_LEAK`, `MASK_TOO_SMALL`, `MASK_TOO_LARGE`, `DUPLICATE_INSTANCE`, `CROSS_TILE_FRAGMENT`, `WRONG_CATEGORY`, `PIXEL_CONFLICT`, or `UNASSIGNED_REGION`. Detection failures use bounded enlarged problem crops; mask failures use local high-resolution SAM with candidate ranking and negative points; category failures use crop classification. A replacement is accepted only when its QA score improves or the explicit mock policy is active.
 
@@ -31,7 +31,7 @@ The implementation is covered by `tests/test_p1_geometry.py` for adaptive window
 
 P0 scan coverage is preserved as `diagnostics/detection_scan_coverage.png`; P1 semantic/detection review uses `coverage_map.png`. The HTML report distinguishes them and can be generated with P0 diagnostics disabled. Fully occluded instances keep their candidate evidence but have no visible PNG; they are not relabeled as failed SAM masks. Terrain QA failures remain explicit after terrain records are removed from the instance list.
 
-The reconstruction comparison ignores RGB hidden behind zero alpha. Visible and inferred terrain assets are separate, and completion preserves observed alpha. Only visible assets and the explicitly labeled residual participate in source reconstruction.
+The reconstruction comparison ignores RGB hidden behind zero alpha. Visible and inferred terrain assets are separate, and completion preserves observed alpha. Source ownership is measured only from visible masks. Scene composition consumes the accepted asset (possibly amodal) and residual; generated alpha is clipped only on the scene canvas.
 
 ## Configuration and validation
 
@@ -47,4 +47,10 @@ Set `p1.enabled: false` to retain the P0 segmentation/refinement path. P1 diagno
 
 ## Evidence limits
 
-Tests and the synthetic mock demo validate mechanics, not real-image segmentation accuracy. A residual-backed SSIM of 1.0 does not establish semantic completeness; inspect `unassigned_ratio`, problem regions, and the summary status. `terrain_completion` currently uses conservative enclosed-hole inference with OpenCV, not generative scene understanding. Hybrid component names remain uncertain proposals until separate geometry is supplied. Amodal object masks remain unset; optional Qwen edit candidates do not silently become full masks. LPIPS remains disabled by default and reports unavailable when optional dependencies or cached weights are absent.
+Tests and the synthetic mock demo validate mechanics, not real-image segmentation accuracy. A residual-backed SSIM of 1.0 does not establish semantic completeness; inspect `unassigned_ratio`, problem regions, and the summary status. `terrain_completion` currently uses conservative enclosed-hole inference with OpenCV, not generative scene understanding. Hybrid component names remain uncertain proposals until separate geometry is supplied. Source SAM masks are not amodal masks; accepted amodal candidates now have explicit reconstructed alpha and expanded geometry (see AMODAL_RECONSTRUCTION.md). LPIPS remains disabled by default and reports unavailable when optional dependencies or cached weights are absent.
+
+## Completion metrics and schema 1.2
+
+`completion_metrics` distinguishes semantic decomposition completeness from reconstruction fidelity. `semantic_coverage` is the union of QA-passed source-visible instance/terrain masks and excludes residual/background; `reconstruction.similarity` is full-canvas pixel fidelity and may be 1.0 while semantic coverage is low. `asset_ready` requires a passing base asset and exportable pixels; optional upscale is excluded.
+
+The portable manifest is now schema `1.2`. `schemas.migration.normalize_manifest` reads 1.1 and adds `geometry.visible_*` and `geometry.full_asset_*`, `base_asset_status`, and `enhancement` without rejecting old checkpoints.

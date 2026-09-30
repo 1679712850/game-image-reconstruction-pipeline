@@ -200,7 +200,7 @@ class P0IntegrationTests(unittest.TestCase):
             root = Path(directory)
             source = root / "input.png"
             Image.new("RGB", (200, 140), (70, 120, 40)).save(source)
-            cfg = PipelineConfig(detection=settings(), scene_loop=SceneLoopConfig(enabled=False))
+            cfg = PipelineConfig(upscale={'enabled':True}, detection=settings(), scene_loop=SceneLoopConfig(enabled=False))
             state = build_graph(cfg).invoke({"source_path": str(source), "output_dir": str(root / "out")})
             self.assertEqual(len(state["objects"]), 4)
             for obj in state["objects"]:
@@ -298,7 +298,7 @@ class P0AdapterTests(unittest.TestCase):
             root = Path(directory)
             source = root/'input.png'
             Image.new('RGB', (40, 40)).save(source)
-            config = PipelineConfig(scene_loop=SceneLoopConfig(enabled=False),
+            config = PipelineConfig(upscale={'enabled':True}, scene_loop=SceneLoopConfig(enabled=False),
                                     p1={'enabled': False},
                                     detection=settings(expand_categories=True, diagnostics={'enabled': False}))
             services = replace(ServiceBundle.create(), grounding=EffectDetector())

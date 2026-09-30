@@ -21,13 +21,15 @@ def _referenced_paths(value):
             yield from _referenced_paths(child)
 
 
-def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnostics_enabled: bool = False, psd_enabled: bool = False) -> Callable[[SceneState], dict]:
+def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnostics_enabled: bool = False, psd_enabled: bool = False, export_config=None) -> Callable[[SceneState], dict]:
     """Bind export provenance; generated manifests explicitly mark mocks."""
     def export(state: SceneState) -> dict:
         """Persist validated metadata with portable asset paths."""
         root = Path(state["output_dir"]).resolve()
         assets = set()
-        updates = {}
+        from cv.completion_metrics import completion_metrics
+        metrics = completion_metrics(state)
+        updates = {'completion_metrics':metrics, 'pipeline_status':metrics['status']}
         if diagnostics_enabled:
             from diagnostics.report_generator import generate_report
             directory = root / "diagnostics"
@@ -45,18 +47,27 @@ def make_export(mock: bool, backends: dict[str, str] | None = None, *, diagnosti
                     content = report.read_text(encoding='utf-8').replace('coverage_map.png','detection_scan_coverage.png')
                     report.write_text(content, encoding='utf-8')
                 shutil.copyfile(semantic, directory/'coverage_map.png')
-            updates['p1_summary'] = export_p1(state, mock=mock)
+            updates['p1_summary'] = export_p1({**state, **updates}, mock=mock)
             for folder in ('metadata','diagnostics','objects','terrain'):
                 assets.update(str(p.resolve()) for p in (root/folder).glob('*') if p.is_file())
         # Build after P1 reporting so checkpoints and scene.json share the summary.
         manifest = build_manifest({**state, **updates}, mock, backends)
         if psd_enabled:
             from exporters.psd_exporter import export_psd
-            updates["psd_path"] = str(export_psd(manifest, root / "scene.psd", asset_root=root))
+            updates["psd_path"] = str(export_psd(manifest, root / "scene.psd", asset_root=root,
+                                                memory_budget_mb=getattr(export_config, 'memory_budget_mb', 2048),
+                                                low_memory=getattr(export_config, 'low_memory', True)))
             manifest.psd = "scene.psd"
             assets.add(updates["psd_path"])
+            assets.add(str((root / "scene.export.json").resolve()))
         scene_json = export_json(manifest, root / "scene.json")
         assets.add(scene_json)
+        # The manifest is the portability contract. Include every referenced
+        # relative artifact, including terrain masks that are not instance records.
+        for referenced in _referenced_paths(manifest.model_dump(mode='json')):
+            path = (root / referenced).resolve()
+            if path.is_file():
+                assets.add(str(path))
         for obj in state.get("objects", []):
             assets.update(obj[key] for key in ("asset_path", "hd_asset_path", "mask_path", 'candidate_mask_path', 'visible_mask_path', 'full_mask_path') if obj.get(key))
         assets.update(layer["asset_path"] for layer in state.get("decomposed_layers", []))

@@ -27,8 +27,8 @@ class CacheConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
     enabled: bool = True
     directory: Path | None = None  # Default: output_dir/cache; shared directories are opt-in.
-    pipeline_version: str = 'p2-v1'
-    prompt_version: str = 'p2-candidate-v1'
+    pipeline_version: str = 'engineering-v1.2'
+    prompt_version: str = 'amodal-candidate-v1'
 
 
 class CandidateConfig(BaseModel):

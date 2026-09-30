@@ -89,6 +89,14 @@ class QwenLayeredConfig(QwenConfig):
     use_en_prompt: bool = True
 
 
+class UpscaleModelConfig(Options):
+    backend: Literal['real_esrgan', 'lanczos'] = 'real_esrgan'
+    checkpoint: Path | None = None
+    tile: int = Field(default=256, ge=0)
+    tile_pad: int = Field(default=16, ge=0)
+    max_output_pixels: int = Field(default=67_108_864, ge=4096)
+
+
 class ModelConfig(Options):
     """Explicit classical scene analysis and real detection/segmentation."""
 
@@ -102,6 +110,7 @@ class ModelConfig(Options):
     qwen_layered: QwenLayeredConfig = Field(default_factory=QwenLayeredConfig)
     qwen_image_edit: QwenConfig = Field(default_factory=QwenConfig)
     scene_reviewer: SceneReviewerConfig = Field(default_factory=SceneReviewerConfig)
+    upscale: UpscaleModelConfig = Field(default_factory=UpscaleModelConfig)
 
     @field_validator("categories")
     @classmethod
@@ -130,6 +139,7 @@ def load_models(path: Path) -> ModelConfig:
     data.setdefault("cache_dir", ".cache/models")
     for parent, key in (
         (data, "cache_dir"), (data.get("sam", {}), "checkpoint"),
+        (data.get("upscale", {}), "checkpoint"),
         (data.get("qwen_layered", {}), "model_path"),
         (data.get("qwen_image_edit", {}), "model_path"),
         (data.get("qwen_layered", {}), "quantized_model_path"),

@@ -72,7 +72,7 @@ def make_detect_instances(service: GroundingService, exercise_retry: bool = Fals
                 while object_id in used:
                     counts[slug] += 1
                     object_id = f"{slug}_{counts[slug]:03d}"
-                if loop is not None and len(used) >= loop.max_objects:
+                if loop is not None and loop.max_objects is not None and len(used) >= loop.max_objects:
                     dropped += 1
                     reject(item, "max_objects")
                     continue
@@ -93,6 +93,8 @@ def make_detect_instances(service: GroundingService, exercise_retry: bool = Fals
                     layer = {"name": obj.group, "categories": [], "order": len(layers)}
                     layers.append(layer)
                 layer["categories"].append(obj.category)
+        limit_drops = sum(r.get('reason') == 'max_objects' for r in filtered_records)
+        diagnostics['object_limit'] = {'truncated':bool(limit_drops),'objects_before_limit':len(detections)+limit_drops,'objects_after_limit':len(detections)}
         diagnostics.update(round=round_index, categories=categories, removed_or_duplicate=dropped, selected=len(detections), selected_objects=detections)
         runs = [*state.get("detection_runs", []), diagnostics]
         if detection is not None and detection.diagnostics.enabled:
