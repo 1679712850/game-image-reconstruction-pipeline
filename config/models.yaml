@@ -1,0 +1,22 @@
+# Adapter planning only: V1 does not load model weights.
+# Wire these settings into services/runtime.py when implementing real adapters.
+vlm:
+  provider: qwen_vl
+  model: null
+  api_key_env: VLM_API_KEY
+  base_url_env: VLM_BASE_URL
+grounding:
+  provider: grounding_dino
+  weights: null
+sam:
+  provider: sam2
+  weights: null
+upscale:
+  provider: real_esrgan
+  weights: null
+layered:
+  provider: qwen_image_layered
+  enabled: false
+image_edit:
+  provider: qwen_image_edit
+  enabled: false

@@ -1,0 +1,11 @@
+layers:
+  - name: terrain
+    categories: [water, road]
+  - name: landforms
+    categories: [mountain, rock]
+  - name: structures
+    categories: [building, bridge]
+  - name: vegetation
+    categories: [tree, bush]
+  - name: decorations
+    categories: [decoration]

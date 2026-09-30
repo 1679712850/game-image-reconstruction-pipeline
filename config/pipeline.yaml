@@ -1,0 +1,13 @@
+mock: true
+max_retry: 1
+exercise_retry: false
+crop:
+  alpha_threshold: 8
+  padding: 16
+qa:
+  min_confidence: 0.35
+  min_occupancy: 0.08
+upscale:
+  enabled: true
+reconstruction:
+  enabled: true

@@ -1,0 +1,21 @@
+"""Export scene.json and enumerate artifacts referenced by this run."""
+from collections.abc import Callable
+from pathlib import Path
+
+from agent.state import SceneState
+from exporters.json_exporter import build_manifest, export_json
+
+
+def make_export(mock: bool) -> Callable[[SceneState], dict]:
+    """Bind export provenance; generated manifests explicitly mark mocks."""
+    def export(state: SceneState) -> dict:
+        """Persist validated metadata with portable asset paths."""
+        manifest = build_manifest(state, mock)
+        scene_json = export_json(manifest, Path(state["output_dir"]) / "scene.json")
+        assets = {scene_json}
+        for obj in state.get("objects", []):
+            assets.update(obj[key] for key in ("asset_path", "hd_asset_path", "mask_path") if obj.get(key))
+        if state.get("reconstruction_path"):
+            assets.add(state["reconstruction_path"])
+        return {"scene_json": scene_json, "exported_assets": sorted(assets)}
+    return export

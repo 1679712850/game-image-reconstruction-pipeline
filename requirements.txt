@@ -1,0 +1,8 @@
+langgraph>=1.0,<2
+langchain>=1.0,<2
+pydantic>=2.10,<3
+pillow>=11,<13
+numpy>=2,<3
+opencv-python>=4.10,<6
+pyyaml>=6,<7
+python-dotenv>=1,<2
