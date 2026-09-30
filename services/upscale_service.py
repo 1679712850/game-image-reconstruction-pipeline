@@ -21,12 +21,13 @@ def choose_scale(width: int, height: int) -> int:
 class UpscaleService:
     """Scale RGBA pixels without changing scene-space metadata."""
 
-    def __init__(self, mock: bool = True):
+    def __init__(self, mock: bool = True, backend: str | None = None):
         self.mock = mock
+        self.backend = backend or ("lanczos" if mock else "real_esrgan")
 
     def upscale(self, image_path: str, scale: float) -> str:
         """Write assets_hd/<id>@<scale>x.png and return its absolute path."""
-        if not self.mock:
+        if self.backend != "lanczos":
             raise NotImplementedError("TODO: connect Real-ESRGAN in UpscaleService.upscale")
         if scale <= 0:
             raise ValueError("Texture scale must be positive")

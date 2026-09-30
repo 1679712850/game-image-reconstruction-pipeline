@@ -1,0 +1,6 @@
+# Optional: install only when running Grounding DINO + SAM 2.
+# Install this first, then requirements-sam2.txt with --no-build-isolation.
+torch>=2.6,<3
+torchvision>=0.21,<1
+transformers>=5.9,<6
+huggingface-hub>=1.5,<2

@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.object import SceneObject
+from schemas.generation import LayerAsset, ObjectEditResult
 
 
 class SceneAnalysis(BaseModel):
@@ -33,11 +34,14 @@ class ExportObject(SceneObject):
 class SceneManifest(BaseModel):
     """Versioned manifest with explicit mock and review information."""
 
-    schema_version: str = "1.0"
+    schema_version: str = "1.1"
     mock: bool
+    backends: dict[str, str] = Field(default_factory=dict)
     scene: SceneInfo
     description: str
     layers: list[dict] = Field(default_factory=list)
+    decomposed_layers: list[LayerAsset] = Field(default_factory=list)
+    object_edits: list[ObjectEditResult] = Field(default_factory=list)
     objects: list[ExportObject]
     retry_count: int
     unresolved_objects: list[str] = Field(default_factory=list)

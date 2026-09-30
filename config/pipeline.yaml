@@ -11,3 +11,8 @@ upscale:
   enabled: true
 reconstruction:
   enabled: true
+# Optional stages; enable only with a complete local Diffusers model_path.
+layer_decomposition:
+  enabled: false
+object_completion:
+  enabled: false

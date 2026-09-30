@@ -1,0 +1,6 @@
+# Optional Qwen adapters. These do not download model weights.
+torch>=2.6,<3
+diffusers>=0.37,<1
+accelerate>=1.10,<2
+transformers>=5.9,<6
+safetensors>=0.5,<1

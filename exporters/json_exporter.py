@@ -7,7 +7,7 @@ from app.paths import relative_asset
 from schemas.scene import ExportObject, SceneManifest
 
 
-def build_manifest(state: SceneState, mock: bool) -> SceneManifest:
+def build_manifest(state: SceneState, mock: bool, backends: dict[str, str] | None = None) -> SceneManifest:
     """Replace internal absolute paths with paths relative to scene.json."""
     root = Path(state["output_dir"])
     objects = []
@@ -19,10 +19,20 @@ def build_manifest(state: SceneState, mock: bool) -> SceneManifest:
         objects.append(ExportObject.model_validate(data))
     analysis = state["scene_analysis"]
     preview = state.get("reconstruction_path")
+    layers, edits = [], []
+    for record in state.get("decomposed_layers", []):
+        layers.append({**record, "asset_path": relative_asset(record["asset_path"], root)})
+    for record in state.get("object_edits", []):
+        data = dict(record)
+        for key in ("asset_path", "source_asset_path", "mask_path"):
+            data[key] = relative_asset(data[key], root)
+        edits.append(data)
     return SceneManifest(
         mock=mock,
+        backends=backends or {},
         scene={"width": state["width"], "height": state["height"], "projection": analysis["projection"]},
         description=analysis["description"], layers=state.get("layer_plan", []),
+        decomposed_layers=layers, object_edits=edits,
         objects=objects, retry_count=state.get("retry_count", 0),
         unresolved_objects=state.get("failed_objects", []),
         reconstruction=relative_asset(preview, root) if preview else None,

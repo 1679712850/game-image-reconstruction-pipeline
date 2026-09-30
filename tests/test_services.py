@@ -26,15 +26,19 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(image.size, (4, 4))
             self.assertTrue(services.layered.decompose_layers(str(path))[0]["mock"])
             self.assertEqual(services.image_edit.analyze_occlusion([]), [])
-            self.assertEqual(services.image_edit.complete_object(str(path), str(path)), str(path.resolve()))
+            edited = services.image_edit.complete_object(
+                str(path), str(path), prompt="Preserve the object", output_path=Path(directory) / "edited.png",
+            )
+            with Image.open(edited) as image:
+                self.assertEqual(image.size, (1, 1))
+                self.assertEqual(image.getpixel((0, 0)), (20, 60, 40, 255))
 
-    def test_real_services_fail_explicitly_until_configured(self) -> None:
+    def test_real_bundle_uses_configured_analysis_and_lanczos(self) -> None:
         services = ServiceBundle.create(mock=False)
-        with self.assertRaises(NotImplementedError):
-            services.vlm.analyze_scene("missing.png")
-        with self.assertRaises(NotImplementedError):
-            services.grounding.detect("missing.png", [])
-        with self.assertRaises(NotImplementedError):
-            services.sam.segment("missing.png", [])
-        with self.assertRaises(NotImplementedError):
-            services.upscale.upscale("missing.png", 2)
+        self.assertIn("Configured", services.vlm.analyze_scene("unused.png").description)
+        self.assertEqual(services.grounding.detect("unused.png", []), [])
+        self.assertEqual(services.sam.segment("unused.png", []), [])
+        self.assertEqual(services.upscale.backend, "lanczos")
+        self.assertEqual(services.provenance()["segmentation"], "sam2_official")
+        self.assertIsNone(services.grounding._model)
+        self.assertIsNone(services.sam._predictor)

@@ -20,3 +20,6 @@ class SceneState(TypedDict, total=False):
     reconstruction_score: float
     scene_json: str
     exported_assets: list[str]
+    decomposed_layers: list[dict]
+    edit_requests: list[dict]
+    object_edits: list[dict]

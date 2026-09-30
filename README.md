@@ -9,9 +9,14 @@ V1 的重点是**可运行且可逐步替换模型的框架**。Mock 不理解�
 重建图只包含这些矩形选区，未提取的草地、道路等区域透明。它验证坐标与合成流程，
 **不代表已经实现完整地图的语义分割、无损还原或生成式超分**。
 
-V1 已通过真实 LangGraph 端到端验收：38 项测试全部通过，正常、强制重试、
-零重试预算三次 CLI 均到达 END。产物分别位于 `output/test/`、
-`output/test_retry/`、`output/no_retry/`，详细结果见 [VERIFICATION.md](VERIFICATION.md)。
+已接入真实 Grounding DINO（Transformers）和官方 SAM 2.1，并在 CPU 上完成
+在线下载及离线推理验收。真实产物位于 `output/real_test/`；原 Mock 模式仍保留。
+真实模式使用配置类别而非 VLM，高清化仍使用 Lanczos。详细结果见
+[VERIFICATION.md](VERIFICATION.md)。
+
+Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接口也已实现。
+本次仅进行无权重的代码接入：两个 `model_path` 均为空、节点默认关闭，
+未安装 Qwen 依赖、未下载 Qwen 权重、未进行 Qwen 神经网络推理。
 
 ## 安装与运行
 
@@ -41,11 +46,11 @@ python -m unittest discover -s tests -v
 
 省略 `--output` 时默认写入仓库的 `output/<输入文件名>/`。
 `--mock` / `--real` 覆盖 YAML 配置；配置默认 `mock: true`。
-当前真实检测/分割/超分适配器未实现，`--real` 会明确报错，不会静默回退到 Mock。
+`--real` 启用 Grounding DINO + SAM 2；模型加载失败会明确报错，不会静默回退到 Mock。
 Mock 模式无需 API key、不发起模型请求、不下载模型权重。
 
-终端打印正常路径的 12 个阶段；retry 另行标记。图中实际有 13 个业务节点，
-另有 START / END。完成时打印 `Done. Reached END.`，
+默认终端打印 12 个阶段；retry 另行标记。默认图有 13 个业务节点，
+开启两个 Qwen 节点后有 15 个业务节点，另有 START / END。完成时打印 `Done. Reached END.`，
 `debug/run.json` 保存节点访问顺序及最终可序列化 State。
 
 ## Architecture
@@ -121,12 +126,15 @@ requirements.txt
 
 ## State 与 Schema
 
-`agent/state.py` 只保留以下 15 个字段：
+`agent/state.py` 的基础字段：
 
 `source_path`、`output_dir`、`width`、`height`、`scene_analysis`、
 `layer_plan`、`detections`、`objects`、`failed_objects`、
 `retry_count`、`max_retry`、`reconstruction_path`、
 `reconstruction_score`、`scene_json`、`exported_assets`。
+
+Qwen 扩展增加 3 个可选字段：`decomposed_layers`（图层记录）、
+`edit_requests`（显式编辑请求）、`object_edits`（编辑候选记录）。
 
 State 中只保存 JSON 可序列化记录与绝对文件路径，
 不保存 ndarray、图像、服务实例或模型。SAM 的临时数组在 node 返回前持久化为 PNG。
@@ -181,9 +189,10 @@ unresolved_objects 和 reconstruction 信息。
 
 `config/pipeline.yaml` 中的 mock、max_retry、crop、qa、
 upscale.enabled、reconstruction.enabled 均实际接入节点。
-`config/categories.yaml` 控制确定性的语义层分组；V1 生成的是层计划，
-不是语义层 PNG。`config/models.yaml` 是未来适配器的配置草案，
-尚不加载模型或权重，不应把其中 provider 字符串视为已实现能力。
+`config/categories.yaml` 控制确定性的语义层分组；默认只生成层计划。
+开启 Qwen Layered 后另外导出图层 PNG，不将生成层假定为配置中的语义类别。
+`config/models.yaml` 实际控制设备、缓存、类别、投影、
+Grounding DINO 模型/阈值/NMS 和 SAM 2 模型配置/权重。
 
 QA 首先检查空/异常 mask 和资产，再检查置信度与 occupancy。
 `occupancy = 有效 mask 像素数 / crop_bbox 面积`。
@@ -192,7 +201,7 @@ QA 首先检查空/异常 mask 和资产，再检查置信度与 occupancy。
 
 Mock retry 会重新生成失败对象的 mask 和 crop，再显式模拟通过，
 保留原始低置信度及说明，不伪造置信度提升。
-真实模式目前只预留有限次重新分割；change_prompt、expand_crop、
+真实模式会对失败对象有限次重新分割，不会把真实 QA 失败模拟通过；change_prompt、expand_crop、
 merge_neighbor_tiles 的智能诊断与执行是后续 TODO。
 
 ## Checkpoint / Human-in-the-loop 接口
@@ -226,15 +235,15 @@ graph.invoke(None, run_config)  # 继续到 END
 | 能力 | 接入位置 | 当前情况 |
 |---|---|---|
 | Qwen-VL | services/vlm_service.py | 固定 Mock；可注入支持 structured output 的 LangChain chat model |
-| Grounding DINO | services/grounding_service.py | 比例框 Mock；真实 detect 待实现 |
-| SAM 2 | services/sam_service.py | 矩形 mask Mock；真实 segment 待实现 |
-| Real-ESRGAN | services/upscale_service.py | Pillow Lanczos Mock；真实 upscale 待实现 |
-| Qwen-Image-Layered | services/qwen_layered_service.py、nodes/future.py | Mock 单层原图引用；未加入主图 |
-| Qwen-Image-Edit / Inpainting | services/image_edit_service.py、nodes/future.py | Mock 无操作；遮挡推断与补全待实现 |
+| Grounding DINO | services/grounding_service.py | Transformers 真实推理、坐标裁剪、类别匹配、class-aware NMS |
+| SAM 2 | services/sam_service.py | Meta 官方 SAM 2.1；bbox prompt、原尺寸 mask、最佳候选选择 |
+| Real-ESRGAN | services/upscale_service.py | 当前显式使用 Pillow Lanczos；生成式超分仍待实现 |
+| Qwen-Image-Layered | services/qwen_layered_service.py、nodes/decompose_layers.py | 本地 Diffusers 适配、可选节点、RGBA 导出；权重留空；Mock 单层透传 |
+| Qwen-Image-Edit | services/image_edit_service.py、nodes/complete_objects.py | 本地 Diffusers 编辑、mask 合成、候选导出；权重留空；Mock 无修改 |
 | PSD / Godot | exporters/psd_exporter.py、exporters/godot_exporter.py | 显式 NotImplementedError；不影响 V1 |
 
-Grounding DINO、SAM 2、Real-ESRGAN、Qwen-Image-Layered 等需要后续
-分别安装各自的模型依赖与权重。第一版 requirements.txt 仅列出
+Grounding DINO、SAM 2 与 Qwen 的可选依赖方式见下文。Real-ESRGAN
+仍需后续接入。基础 requirements.txt 仅列出
 langgraph、langchain、pydantic、pillow、numpy、opencv-python、pyyaml、
 python-dotenv，没有 torch、transformers 或任何模型包。
 
@@ -244,6 +253,206 @@ python-dotenv，没有 torch、transformers 或任何模型包。
 重建坐标与 alpha 混合、Y-sort、pivot、scale 边界、schema 校验、配置、
 正常 graph、强制 retry、持续失败耗尽预算、无检测、checkpoint 暂停/恢复。
 
-后续逐步实现：真实模型适配器、语义层图像、遮挡补全、CV+VLM QA、
+后续逐步实现：Qwen 权重配置与真实验收、图层语义/所有权映射、
+Qwen-VL / Real-ESRGAN 等适配器、遮挡补全和新轮廓重分割、CV+VLM QA、
 retry diagnosis、tile 合并、背景覆盖与所有权处理、持久化 saver、
 人工交互 UI、PSD 与 Godot 导出。
+
+## Grounding DINO + SAM 2 真实模式
+
+推荐 Python 3.11/3.12。保持基础依赖轻量，模型依赖另行安装：
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-vision.txt
+# 官方 SAM 2 固定源码提交。CPU/macOS 无需编译 CUDA 扩展：
+SAM2_BUILD_CUDA=0 python -m pip install --no-build-isolation -r requirements-sam2.txt
+
+python main.py --input input/test.png --output output/real_test --real
+# 下载完成后可完全离线运行；找不到文件会报错，不访问 Hub：
+python main.py --input input/test.png --output output/real_test --real --offline --device cpu
+```
+
+CUDA 机器先按 PyTorch 官方安装说明选择匹配 CUDA 的 torch/torchvision。
+官方 SAM 2 使用固定提交 `2b90b9f5ceec907a1c18123530e92e794ad901a4`。
+本适配器关闭依赖 CUDA 扩展的后处理，CPU 推理也能得到原图尺寸的 mask。
+
+默认模型为 `IDEA-Research/grounding-dino-tiny` 和
+`facebook/sam2.1-hiera-tiny`。首次运行下载约 0.8GB 权重至仓库
+`.cache/models/`，输入图只在本地处理。模型惰性加载且复用，Mock 不导入 torch/模型包，
+无检测时 SAM 不加载。SAM 每次分割调用只编码一次图像，依次用 bbox 解码各对象；
+不同 graph 并发执行请创建独立 ServiceBundle（SAM predictor 有图像状态）。
+
+使用 `--models-config path/to/models.yaml` 可替换配置：
+
+- `device`: `auto` 优先 CUDA，否则 CPU；`cpu`、`cuda`、`mps` 可显式指定。
+  MPS 为可选实验路径，本次只实测 CPU，不做设备出错后的静默回退。
+- `cache_dir`: Hub 缓存；相对路径基于 YAML 文件目录。
+- `local_files_only`: 离线加载；CLI `--offline` 可覆盖为 true。
+- `categories`: 英文检测短语。每项应是单个类别，不含句号或换行。
+  固定类别是检测提示，不代表物体一定存在；VLM 尚未接入。
+- `projection`: 用户提供的投影元数据，不由检测/分割模型推断。
+- `grounding.model_id`: Hub ID 或本地 Transformers 模型目录；本地相对路径以 `./` 开头。
+- `grounding.revision` / `sam.revision`: 可设置固定 Hub commit 以重现模型版本。
+- `grounding.box_threshold` / `text_threshold`: 模型结果与文本匹配阈值。
+- `grounding.nms_iou`: 同类别 IoU 去重阈值；不同类别可能仍覆盖同一物体。
+- `grounding.max_detections`: 进入 SAM 的对象数上限。
+- `sam.model_config_name`: 官方 SAM 2 内置配置名，必须与 checkpoint 匹配。
+- `sam.checkpoint`: 本地 `.pt` 权重；非空时必须存在，不会回退到 Hub。
+  留空时从 `sam.repo_id` / `filename` 下载并缓存。
+- `sam.multimask_output`: 可输出多个候选，按 SAM 预测质量分选最佳；检测置信度保持不变。
+- `sam.mask_threshold`: SAM mask logits 阈值；落盘仍为 0/255 uint8 灰度 mask。
+
+原图 xywh 检测框先 floor/ceil、裁剪边界、删除无效框及 NMS，
+再转换为 SAM 的像素 xyxy box prompt。mask 回到原图分辨率后复用已有
+refine/crop/QA/metadata/reconstruct/export 节点。没有手工框替换真实检测结果。
+
+`scene.json.backends` 明确记录：
+
+```json
+{
+  "analysis": "configured_categories",
+  "grounding": "grounding_dino_transformers",
+  "segmentation": "sam2_official",
+  "upscale": "lanczos"
+}
+```
+
+`mock: false` 表示当前采用真实检测/分割路径，不代表 Qwen-VL、
+Real-ESRGAN 或所有未来模型已经接入。`debug/run.json.models` 保存本次模型配置。
+
+### 本次实测范围
+
+在合成地图上真实检测到 6 个候选，完成 SAM 分割和 1 次重试后到达 END；
+4 个通过规则 QA，2 个保持 manual_review。建筑和岩石得到非矩形透明轮廓。
+该简单测试图仍出现道路/桥梁的大范围误检及树木漏检，说明通用 tiny 模型
+需要针对真实游戏图调整英文提示、阈值及 QA，不能据此宣称语义准确率达标。
+场景级大对象的 crop 可能接近整图尺寸，这是实际 mask 覆盖范围，不是裁剪失效。
+
+## Qwen 可选节点：代码已接入，模型留空
+
+默认配置保持：
+
+```yaml
+# config/pipeline.yaml
+layer_decomposition:
+  enabled: false
+object_completion:
+  enabled: false
+
+# config/models.yaml（另一份配置文件）
+qwen_layered:
+  model_path: null
+qwen_image_edit:
+  model_path: null
+```
+
+两个模型只接受**本地完整 Diffusers 模型目录**，加载器始终传入
+`local_files_only=True`，不受 Grounding/SAM 的在线配置影响。
+`null` / 空字符串表示未配置；显式启用真实节点而未配置目录时，在图构建阶段
+清晰报错，早于任何检测推理。不会回退到 Mock 或尝试默认 Hub 模型。
+模型目录相对 `models.yaml` 解析，至少需要 `model_index.json` 及其引用的组件。
+
+后续准备好本地模型时，再安装独立的 `requirements-qwen.txt` 并填写目录。
+本次没有执行该安装。适配器分别使用 Diffusers 的 `QwenImageLayeredPipeline`
+和 `QwenImageEditPipeline`；Image Edit 对应原版单图管线，不自动兼容 Edit Plus
+或任意新变体。依赖版本范围与真实推理尚待模型就绪后验证。
+
+两个适配器均惰性加载、复用实例，支持配置 `dtype`、`num_inference_steps`、
+`true_cfg_scale`、`negative_prompt` 与 `seed`。Layered 还支持 `layers`、
+`resolution`、`cfg_normalize`、`use_en_prompt`。设备沿用 `models.yaml.device`；
+`dtype: auto` 在 CUDA 选择 bfloat16，其他设备选择 float32。
+
+```mermaid
+flowchart LR
+    PLAN[plan_layers] --> LAYER[decompose_layers 可选]
+    LAYER --> DETECT[detect_instances]
+    QA[qa_objects 结束重试] --> EDIT[complete_objects 可选]
+    EDIT --> UPSCALE[upscale_objects]
+```
+
+未开启时直接走原来的相邻节点。两个新节点只返回状态增量，模型对象不进入
+checkpoint；retry 仍只处理已有失败实例，不重复调用 Qwen 生成。
+
+### 无模型 Demo
+
+仅启用 Layered Mock：
+
+```bash
+.venv/bin/python main.py --input input/test.png --output output/qwen_layers_demo \
+  --mock --decompose-layers
+```
+
+Layered Mock 生成一个像素不变的 RGBA 层，标记 `mock_passthrough`，
+不伪造语义分层。真实 Layered 适配器接收 RGBA 层列表，保留模型 alpha，
+必要时将完整图层画布缩放回输入场景尺寸，并同时记录 `model_size` 和 `canvas_size`。
+`order` 只记录返回顺序；图层语义、遮挡关系与正确合成顺序仍需验证。
+
+Image Edit 使用显式请求，不自动猜测要补全哪些物体：
+
+```json
+[
+  {
+    "object_id": "tree_001",
+    "mask_path": "tree_mask.png",
+    "prompt": "Repair the tree texture while preserving its style and silhouette."
+  }
+]
+```
+
+`mask_path` 相对请求 JSON 解析。mask 必须是**原始裁剪资产尺寸**，
+不是整张场景尺寸，也不是高清纹理尺寸。白色允许修改，黑色保持原 RGB。
+空 mask、重复对象 ID、未知对象、空提示词、尺寸不匹配均报错。
+无请求时编辑节点直接返回空结果，不调用模型。
+
+可从一次 Mock 基线运行生成测试请求，再完整运行两个节点：
+
+```bash
+.venv/bin/python main.py --input input/test.png --output output/qwen_baseline --mock
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+from PIL import Image
+
+root = Path("input/qwen_demo_edits")
+root.mkdir(parents=True, exist_ok=True)
+scene = json.loads(Path("output/qwen_baseline/scene.json").read_text(encoding="utf-8"))
+obj = scene["objects"][0]
+Image.new("L", tuple(obj["logical_size"]), 255).save(root / "tree_mask.png")
+requests = [{"object_id": obj["id"], "mask_path": "tree_mask.png", "prompt": "Repair the tree texture while preserving its style and silhouette."}]
+(root / "requests.json").write_text(json.dumps(requests, indent=2), encoding="utf-8")
+PY
+.venv/bin/python main.py --input input/test.png --output output/qwen_mock_demo \
+  --mock --decompose-layers --edit-requests input/qwen_demo_edits/requests.json \
+  --exercise-retry
+```
+
+Image Edit Mock 写出独立、像素不变的候选 PNG 并标记 `mock_noop`。
+真实适配器将提示词与 RGB 图传给编辑模型，然后在本地按 mask 合成结果，
+保留原始 alpha 与逻辑尺寸。**mask 不作为模型的原生 inpainting 参数**；
+这版不能补出原 alpha 外的新轮廓，也不宣称完成遮挡推断。
+完整遮挡补全还需要生成内容后的 SAM 重分割、坐标/pivot 更新及 QA。
+
+### 新增输出与边界
+
+```text
+output/qwen_mock_demo/
+├── layers/layer_000.png
+├── assets_edited/tree_001.png
+├── edit_masks/tree_001.png
+├── assets/、assets_hd/、masks/、debug/
+├── scene.json
+└── reconstruction.png
+```
+
+`scene.json` 版本为 `1.1`，保留已有 `layers` 语义计划，另增
+`decomposed_layers` 与 `object_edits`。新增文件路径同样相对输出目录，
+包含在 `exported_assets` 内。真实生成结果标记 `manual_review`。
+原始 `asset_path`、mask、pivot、z_order 不被生成候选覆盖；
+当前 `reconstruction.png` 仍由原始实例资产重建。
+
+Layered 图层和 Image Edit 候选目前是可导出的附加产物，
+尚未用于细分检测、自动填补漏检区域或替换实例纹理。
+接入这两个接口本身不会解决复杂大图只检测到少量对象的问题；
+切片检测、分类提示与覆盖率检查仍是独立的后续任务。

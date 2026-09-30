@@ -1,22 +1,41 @@
-# Adapter planning only: V1 does not load model weights.
-# Wire these settings into services/runtime.py when implementing real adapters.
-vlm:
-  provider: qwen_vl
-  model: null
-  api_key_env: VLM_API_KEY
-  base_url_env: VLM_BASE_URL
+# Real mode: configured semantics + Grounding DINO + official SAM 2 + Lanczos.
+# Paths are relative to this YAML. CPU is portable; MPS is opt-in.
+device: auto
+cache_dir: ../.cache/models
+local_files_only: false
+categories: [tree, rock, mountain, building, bridge, bush, water, road]
+projection: isometric
+
 grounding:
-  provider: grounding_dino
-  weights: null
+  model_id: IDEA-Research/grounding-dino-tiny
+  revision: main
+  box_threshold: 0.30
+  text_threshold: 0.25
+  nms_iou: 0.5
+  max_detections: 100
+
 sam:
-  provider: sam2
-  weights: null
-upscale:
-  provider: real_esrgan
-  weights: null
-layered:
-  provider: qwen_image_layered
-  enabled: false
-image_edit:
-  provider: qwen_image_edit
-  enabled: false
+  model_config_name: configs/sam2.1/sam2.1_hiera_t.yaml
+  checkpoint: null
+  repo_id: facebook/sam2.1-hiera-tiny
+  filename: sam2.1_hiera_tiny.pt
+  revision: main
+  multimask_output: false
+  mask_threshold: 0.0
+
+# Optional local-only Qwen adapters. Leave model_path null to keep them unloaded.
+qwen_layered:
+  model_path: null
+  dtype: auto
+  layers: 4
+  resolution: 640
+  num_inference_steps: 50
+  true_cfg_scale: 4.0
+  seed: 0
+
+qwen_image_edit:
+  model_path: null
+  dtype: auto
+  num_inference_steps: 50
+  true_cfg_scale: 4.0
+  seed: 0

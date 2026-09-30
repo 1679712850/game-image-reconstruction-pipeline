@@ -30,6 +30,12 @@ class ReconstructionConfig(Options):
     enabled: bool = True
 
 
+class OptionalStageConfig(Options):
+    """Generative stages are opt-in and leave the default backbone unchanged."""
+
+    enabled: bool = False
+
+
 class PipelineConfig(Options):
     mock: bool = True
     max_retry: int = Field(default=1, ge=0, le=100)
@@ -38,6 +44,8 @@ class PipelineConfig(Options):
     qa: QAConfig = Field(default_factory=QAConfig)
     upscale: UpscaleConfig = Field(default_factory=UpscaleConfig)
     reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
+    layer_decomposition: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
+    object_completion: OptionalStageConfig = Field(default_factory=OptionalStageConfig)
 
     @model_validator(mode="after")
     def validate_retry_demo(self) -> Self:
