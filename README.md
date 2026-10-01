@@ -52,27 +52,36 @@ Qwen-Image-Layered / Qwen-Image-Edit 的本地适配、可选节点与导出接�
 默认生成仍关闭；候选选择、`scene.psd`、`performance_report.json`、`timeline.html` 默认输出。
 配置、回退规则与验证边界见 [docs/P2_CANDIDATES_RESOURCES.md](docs/P2_CANDIDATES_RESOURCES.md)。
 
-## 安装与运行
+## AutoDL 部署指南
 
-推荐 Python 3.11+。仓库根目录就是设计中的 `scene_reconstructor/` 项目根，
+从 GitHub 获取源码、通过 ModelScope 下载官方非量化权重、硬件与存储容量、完整配置和验收命令见 [AutoDL 部署命令](docs/DEPLOYMENT.md)。源码、venv、模型、配置、缓存、临时文件和输入输出统一放在 `/root/autodl-tmp/game-reconstruction`。指南区分当前代码可直接部署的高规格兼容方案与需要新增适配器的旗舰方案；完整兼容模型约占 171.43 GiB。
+
+使用 AutoDL 时参阅 [AutoDL 配置与存储指南](docs/AUTODL.md)：单次精简部署数据盘最低约 250GB，推荐 300GB，长期生产 400GB+；所有大文件和环境放在数据盘。
+
+## 安装与运行（AutoDL）
+
+推荐 Python 3.11/3.12。后续开发示例也默认先加载上述数据盘环境，并在 `$SOURCE_ROOT` 中运行；示例中的相对目录仍位于数据盘源码目录下。实际部署的下载、安装与启动以部署指南为准。
+
+仓库根目录就是设计中的 `scene_reconstructor/` 项目根，
 直接保留 `agent/`、`nodes/`、`services/` 等目录，避免多套启动路径。
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+# 先执行上方 AutoDL 部署指南第 3–4 节，创建数据盘环境并安装依赖。
+source /root/autodl-tmp/game-reconstruction/env.sh
+source "$DEPLOY_ROOT/venv/bin/activate"
+cd "$SOURCE_ROOT"
 
 # 自动生成 640 × 480 的简单测试地图
-python -m app.demo --output input/test.png
+python -m app.demo --output "$INPUT_ROOT/test.png"
 
 # 实际调用 graph.invoke(...)
-python main.py --input input/test.png --output output/test --mock
+python main.py --input "$INPUT_ROOT/test.png" --output "$OUTPUT_ROOT/test" --mock
 
 # 注入一个低置信度 Mock 对象，验证 retry → QA
-python main.py --input input/test.png --output output/test_retry --mock --exercise-retry
+python main.py --input "$INPUT_ROOT/test.png" --output "$OUTPUT_ROOT/test_retry" --mock --exercise-retry
 
 # 验证不允许 retry 时转入人工复核
-python main.py --input input/test.png --output output/no_retry --mock --exercise-retry --max-retry 0
+python main.py --input "$INPUT_ROOT/test.png" --output "$OUTPUT_ROOT/no_retry" --mock --exercise-retry --max-retry 0
 
 # 标准库 unittest，无需额外安装 pytest
 python -m unittest discover -s tests -v
@@ -312,12 +321,15 @@ python-dotenv、psutil，没有 torch、transformers 或任何模型包。
 目录必须包含 `config.json`、safetensors 权重和完整 processor/tokenizer/chat template 文件。
 本次只实现代码：`qwen_vl.model_path` 保持 `null`，没有下载权重。
 
-后续准备好本地模型时：
+完成 AutoDL 指南中的模型下载和配置生成后：
 
 ```bash
-.venv/bin/python -m pip install -r requirements-vlm.txt
-# 在 config/models.yaml 中填写 qwen_vl.model_path 后运行；其他启用模型也需配置。
-.venv/bin/python main.py --input input/test.png --output output/local_vlm --real --offline
+source /root/autodl-tmp/game-reconstruction/env.sh
+source "$DEPLOY_ROOT/venv/bin/activate"
+cd "$SOURCE_ROOT"
+python main.py --input "$INPUT_ROOT/test.png" --output "$OUTPUT_ROOT/local_vlm" \
+  --real --offline --models-config "$CONFIG_ROOT/models.deploy.yaml" \
+  --config "$CONFIG_ROOT/pipeline.deploy-base.yaml"
 ```
 
 ```yaml
@@ -348,23 +360,18 @@ LangChain runnable 用 JSON schema 提示并经 Pydantic 校验；这不是原�
 
 ## Grounding DINO + SAM 2 真实模式
 
-推荐 Python 3.11/3.12。保持基础依赖轻量，模型依赖另行安装：
+AutoDL 依赖安装和模型准备统一使用 [部署指南第 3–6 节](docs/DEPLOYMENT.md#3-autodl-数据盘初始化与-github-源码下载)，无需再创建仓库内 `.venv`。运行基础真实流程：
 
 ```bash
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-vision.txt
-python -m pip install -r requirements-vlm.txt
-# 官方 SAM 2 固定源码提交。CPU/macOS 无需编译 CUDA 扩展：
-SAM2_BUILD_CUDA=0 python -m pip install --no-build-isolation -r requirements-sam2.txt
-
-# 先填写 qwen_vl.model_path；启用的超分/生成模型另行配置。
-python main.py --input input/test.png --output output/real_test --real
-# 下载完成后可完全离线运行；找不到文件会报错，不访问 Hub：
-python main.py --input input/test.png --output output/real_test --real --offline --device cpu
+source /root/autodl-tmp/game-reconstruction/env.sh
+source "$DEPLOY_ROOT/venv/bin/activate"
+cd "$SOURCE_ROOT"
+python main.py --input "$INPUT_ROOT/test.png" --output "$OUTPUT_ROOT/real_test" \
+  --real --offline --device cuda \
+  --models-config "$CONFIG_ROOT/models.deploy.yaml" \
+  --config "$CONFIG_ROOT/pipeline.deploy-base.yaml"
 ```
 
-CUDA 机器先按 PyTorch 官方安装说明选择匹配 CUDA 的 torch/torchvision。
 官方 SAM 2 使用固定提交 `2b90b9f5ceec907a1c18123530e92e794ad901a4`。
 本适配器关闭依赖 CUDA 扩展的后处理，CPU 推理也能得到原图尺寸的 mask。
 
@@ -471,7 +478,7 @@ checkpoint；候选 RETRY 根据失败原因修改 prompt，受独立生成预�
 仅启用 Layered Mock：
 
 ```bash
-.venv/bin/python main.py --input input/test.png --output output/qwen_layers_demo \
+python main.py --input input/test.png --output output/qwen_layers_demo \
   --mock --decompose-layers
 ```
 
@@ -501,8 +508,8 @@ Image Edit 支持以下显式重建请求；启用生成后也可根据遮挡/�
 可从一次 Mock 基线运行生成测试请求，再完整运行两个节点：
 
 ```bash
-.venv/bin/python main.py --input input/test.png --output output/qwen_baseline --mock
-.venv/bin/python - <<'PY'
+python main.py --input input/test.png --output output/qwen_baseline --mock
+python - <<'PY'
 import json
 from pathlib import Path
 from PIL import Image
@@ -515,7 +522,7 @@ Image.new("L", tuple(obj["logical_size"]), 255).save(root / "tree_mask.png")
 requests = [{"object_id": obj["id"], "mask_path": "tree_mask.png", "prompt": "Reconstruct the complete tree including the hidden trunk and roots, preserving its style."}]
 (root / "requests.json").write_text(json.dumps(requests, indent=2), encoding="utf-8")
 PY
-.venv/bin/python main.py --input input/test.png --output output/qwen_mock_demo \
+python main.py --input input/test.png --output output/qwen_mock_demo \
   --mock --decompose-layers --edit-requests input/qwen_demo_edits/requests.json \
   --exercise-retry
 ```
@@ -583,13 +590,13 @@ LLM 调用异常时保留已有产物并标记 `manual_review`，不静默假装
 
 ```bash
 # 真实视觉模型 + 显式规则审查，本地缓存运行
-.venv/bin/python main.py --input 'input/宗门废墟.png' \
+python main.py --input 'input/宗门废墟.png' \
   --output output/iterative_ruins --real --offline --device cpu \
   --scene-reviewer rules --max-rounds 3
 
 # 配置本地 qwen_vl.model_path 后（默认 reviewer 已为 llm）
-.venv/bin/python -m pip install -r requirements-vlm.txt
-.venv/bin/python main.py --input 'input/宗门废墟.png' \
+python -m pip install -r requirements-vlm.txt
+python main.py --input 'input/宗门废墟.png' \
   --output output/llm_ruins --real --offline --scene-reviewer llm
 ```
 
@@ -623,7 +630,7 @@ debug/round_02/...              后续轮次
 The production graph remains the only detection implementation. `benchmarks.runner` evaluates a reviewed ROI annotation against its `scene.json`; it never replaces global/tiled detection. An annotation supports bbox-only GT, optional mask files, ROI, ignore objects/regions, semantic groups and instance IDs.
 
 ```bash
-.venv/bin/python -m benchmarks.runner \
+python -m benchmarks.runner \
   --annotation benchmarks/annotations/sect_ruins_courtyard.json \
   --output benchmarks/reports/sect_ruins \
   --manifest output/real_test/scene.json \
