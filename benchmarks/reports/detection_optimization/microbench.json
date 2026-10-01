@@ -1,0 +1,26 @@
+{
+  "seed": 23,
+  "device": "cpu",
+  "measurement": "median after warm-up",
+  "fusion": {
+    "input_candidates": 1800,
+    "output_equal": true,
+    "baseline_seconds": 1.94731533400045,
+    "optimized_seconds": 0.046103332999337,
+    "speedup": 42.2380597521757
+  },
+  "sam_candidate_scoring": {
+    "image_size": [
+      512,
+      512
+    ],
+    "candidates": 3,
+    "scores_equal": true,
+    "canny_calls_before": 3,
+    "canny_calls_after": 1,
+    "baseline_seconds": 0.00870583399955649,
+    "optimized_seconds": 0.0034841250017052516,
+    "speedup": 2.4987145970065803
+  },
+  "limitations": "Synthetic CPU microbenchmarks, not whole-pipeline or CUDA speedup measurements."
+}

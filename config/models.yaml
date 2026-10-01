@@ -7,6 +7,8 @@ categories: [tree, rock, mountain, building, bridge, bush, water, road, pillar, 
 projection: isometric
 
 grounding:
+  reuse_image_inputs: true
+  batch_size: 1  # CUDA: opt into 2-4 after comparing predictions on your hardware.
   model_id: IDEA-Research/grounding-dino-tiny
   revision: main
   box_threshold: 0.30
@@ -75,6 +77,7 @@ upscale:
   checkpoint: null
   tile: 256
   tile_pad: 16
+  skip_transparent_tiles: true
 
 # Optional local-only Qwen adapters. Leave model_path null to keep them unloaded.
 qwen_layered:

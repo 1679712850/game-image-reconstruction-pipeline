@@ -11,12 +11,13 @@ import sys
 from services.cache_manager import CacheManager
 from services.model_manager import ModelManager, is_oom
 from services.profiler import Profiler
+from services.progress import duration
 
 _active = ContextVar('pipeline_execution', default=None)
 _depth = ContextVar('pipeline_service_depth', default=0)
 METHODS = {
     'vlm': ('vlm', ['analyze_scene']),
-    'grounding': ('detection', ['detect', 'detect_round', 'detect_p0', '_infer_image']),
+    'grounding': ('detection', ['detect', 'detect_round', 'detect_p0', '_infer_image', '_infer_batch']),
     'sam': ('segmentation', ['segment', 'segment_local', 'predict_candidates']),
     'image_edit': ('generation', ['complete_object', 'generate_object']),
     'layered': ('generation', ['decompose_layers']),
@@ -60,7 +61,7 @@ class ExecutionRuntime:
         @wraps(function)
         def invoke(*args, **kwargs):
             current = _active.get()
-            if current is None or (_depth.get() and method != '_infer_image'):
+            if current is None or (_depth.get() and method not in {'_infer_image', '_infer_batch'}):
                 return function(*args, **kwargs)
             token = _depth.set(_depth.get()+1)
             try:
@@ -108,7 +109,7 @@ class ExecutionRuntime:
                 if not self.detection_budget.consume('redetection'):
                     raise RuntimeError('Detection OOM retry budget exhausted')
             started = len(self.profiler.events)
-            outer_detection = name == 'grounding' and method != '_infer_image'
+            outer_detection = name == 'grounding' and method not in {'_infer_image', '_infer_batch'}
             empty_segmentation = method in {'segment', 'segment_local'} and parameters.get('detections') == []
             managed = model_name in self.manager.entries and not outer_detection and not empty_segmentation
             try:
@@ -147,6 +148,10 @@ class ExecutionRuntime:
                     self.cache.put(namespace, key, result)
                 return result
             except Exception as error:
+                # The detector splits batches without changing precision/device.
+                # Failed singletons are replayed through the normal single-call path.
+                if method == '_infer_batch':
+                    raise
                 if not is_oom(error):
                     raise
                 if attempt >= self.config.resources.max_oom_retry:
@@ -175,6 +180,7 @@ class ExecutionRuntime:
                 label = {'detect_instances':'Detection','segment_instances':'Segmentation','qa_objects':'QA',
                          'upscale_objects':'Upscale','export':'Export','reconstruct_scene':'Reconstruction'}.get(name,'Pipeline')
                 logging.getLogger(__name__).info('[%s] node=%s event=start',label,name)
+                node_started = time.monotonic()
                 with self.profiler.span(name):
                     try:
                         updates = function(state)
@@ -182,7 +188,8 @@ class ExecutionRuntime:
                         from services.resource_fallback import recover_node
                         updates = recover_node(name, state, error, self.services)
                     self.manager.end_stage(final=name == 'export')
-                logging.getLogger(__name__).info('[%s] node=%s event=end status=%s',label,name,updates.get('pipeline_status','completed_stage'))
+                logging.getLogger(__name__).info('[%s] node=%s event=end status=%s elapsed=%s',
+                    label,name,updates.get('pipeline_status','completed_stage'),duration(time.monotonic()-node_started))
                 updates['detection_budget'] = self.detection_budget.report()
                 paths = self.profiler.write(root, self.cache.stats, self.manager.states()) if name == 'export' else None
                 if paths:

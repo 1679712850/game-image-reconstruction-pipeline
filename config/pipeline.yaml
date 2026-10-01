@@ -2,6 +2,7 @@ mock: true
 p1:
   enabled: true
   max_local_crop_size: 1024
+  detection_prefetch_regions: 4  # Ordered lookahead only with sufficient object/call budgets.
   min_local_size: 512
   max_sam_input_size: 2048
   max_detection_retry: 2

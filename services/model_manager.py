@@ -76,6 +76,8 @@ class ModelManager:
         if entry.active:
             return
         service = entry.service; handle = self.handle(service)
+        if hasattr(service, 'clear_prepared_inputs'):
+            service.clear_prepared_inputs()
         if handle is None:
             entry.status = 'NOT_LOADED'; return
         if offload and entry.status == 'GPU':

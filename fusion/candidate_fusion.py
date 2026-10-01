@@ -1,5 +1,6 @@
 """Fuse observations while preserving original confidence and source lineage."""
 from fusion.cross_tile_dedup import same_object
+from fusion.spatial_index import CandidateIndex
 
 
 def merge_candidates(a, b):
@@ -28,10 +29,12 @@ def merge_candidates(a, b):
 
 def fuse_candidates(candidates, config):
     kept, rejected = [], []
+    spatial = CandidateIndex()
     for candidate in sorted(candidates, key=lambda c: (not c.is_truncated, c.confidence), reverse=True):
-        match = next((i for i, old in enumerate(kept) if same_object(old, candidate, config)), None)
+        match = next((i for i in spatial.query(candidate) if same_object(kept[i], candidate, config)), None)
         if match is None:
             kept.append(candidate.model_copy(deep=True))
+            spatial.update(len(kept)-1, kept[-1])
         else:
             old = kept[match]
             merged = merge_candidates(old, candidate)
@@ -41,4 +44,5 @@ def fuse_candidates(candidates, config):
             duplicate.parent_id = merged.id
             rejected.append(duplicate)
             kept[match] = merged
+            spatial.update(match, merged)
     return kept, rejected

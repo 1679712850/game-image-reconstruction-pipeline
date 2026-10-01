@@ -98,7 +98,10 @@ def run_pipeline(args: argparse.Namespace) -> SceneState:
             overrides["device"] = args.device
         models = models.model_copy(update=overrides)
     services = ServiceBundle.create(mock=config.mock, models=models, reviewer_backend=config.scene_loop.reviewer)
-    graph = build_graph(config, services=services, progress=progress)
+    graph = build_graph(
+        config, services=services, progress=progress,
+        progress_detail=lambda detail: print(detail, flush=True),
+    )
     initial: SceneState = {
         "source_path": str(args.input.expanduser().resolve()),
         "output_dir": str(output), "retry_count": 0,

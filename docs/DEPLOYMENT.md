@@ -144,6 +144,8 @@ mkdir -p "$MODEL_ROOT" "$CONFIG_ROOT" "$INPUT_ROOT" "$OUTPUT_ROOT" "$RECORD_ROOT
 ### 3.2 获取源码并创建数据盘虚拟环境
 
 ```bash
+(
+set -e
 source /root/autodl-tmp/game-reconstruction/env.sh
 # 首次部署执行；如果 source 已存在，应进入原目录核对，不覆盖已有工作。
 git clone https://github.com/1679712850/game-image-reconstruction-pipeline.git "$SOURCE_ROOT"
@@ -156,9 +158,37 @@ git rev-parse HEAD > "$RECORD_ROOT/source-commit.txt"
 python -m venv "$DEPLOY_ROOT/venv"
 source "$DEPLOY_ROOT/venv/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
+)
 ```
 
 私有仓库先完成 GitHub 登录或 SSH 授权。若选择其他源码版本，记录实际 commit 并重新核对适配器。不要把本机已有 `.venv`、模型或输出重复复制进 `source`。
+
+若出现 `destination path ... already exists`，该次克隆没有执行成功；不要继续执行 checkout 或安装。`reference is not a tree` 表示当前仓库没有目标提交，随后 `HEAD` 不存在则表示当前仓库没有有效检出。目标提交 `07ac9cc63968b7e94ef6275852c486879b707c83` 已包含在远端 main 历史中。
+
+对于首次部署失败留下的目录，可执行以下恢复命令。它会将整个旧目录移到唯一备份目录（保留已有文件），再重新克隆；任一步失败都会停止，且不会退出当前交互终端。不要在有任务使用该源码目录时执行。
+
+```bash
+(
+set -e
+source /root/autodl-tmp/game-reconstruction/env.sh
+test "$SOURCE_ROOT" = "$DEPLOY_ROOT/source"
+mkdir -p "$RECORD_ROOT"
+cd "$DEPLOY_ROOT"
+if [ -e "$SOURCE_ROOT" ]; then
+  source_backup=$(mktemp -d "$DEPLOY_ROOT/source-backup.XXXXXX")
+  mv "$SOURCE_ROOT" "$source_backup/source"
+  echo "旧源码已保留在：$source_backup/source"
+fi
+git clone https://github.com/1679712850/game-image-reconstruction-pipeline.git "$SOURCE_ROOT"
+cd "$SOURCE_ROOT"
+git checkout --detach 07ac9cc63968b7e94ef6275852c486879b707c83
+git rev-parse --verify HEAD > "$RECORD_ROOT/source-commit.txt"
+python -m venv "$DEPLOY_ROOT/venv"
+"$DEPLOY_ROOT/venv/bin/python" -m pip install --upgrade pip setuptools wheel
+)
+```
+
+恢复成功后执行下节的环境恢复命令。粘贴命令时使用代码块中的纯文本 URL，不要复制 Markdown 链接格式，也不要在每行末尾添加反斜杠。
 
 ### 3.3 每次新开终端恢复环境
 
@@ -502,3 +532,9 @@ PY
 容量核验接口：`https://modelscope.cn/api/v1/models/{namespace}/{name}/repo/files?Revision=master&Recursive=true`。这些数据是仓库下载字节数，不是显存需求；正式运行应保存所用 revision、权重哈希、软件版本与性能报告。
 
 本指南编写时已核查本地源码接口、ModelScope 文件列表和部分模型配置；未下载完整 Qwen 权重，也未在 NVIDIA 服务器执行上述完整部署。现有 CPU 检测/分割历史验证不能替代本方案的 CUDA、生成模型和完整质量验收。
+
+### 检测速度参数
+
+`models.yaml:grounding.reuse_image_inputs` 默认启用，会复用同一检测窗口的图像张量；它不改变提示词、阈值、框坐标转换或候选排序。`grounding.batch_size` 默认 `1`，这是可复现优先的设置；有 CUDA 显存余量时可在独立基准中设置为 `2` 或 `4`。批处理仅合并同一窗口内、相同 token 长度的提示词组，发生 OOM 会拆成更小批次，仍保持候选顺序。若需要严格数值复现，保持 `batch_size: 1`。
+
+P1 局部补检会在 detector 明确提供保守 `detect_bounds` 且预算允许时预取后续区域。对象上限、检测调用预算或失败回退会关闭预取；SAM 分割、QA、ID 分配和重试提交顺序保持原有行为。

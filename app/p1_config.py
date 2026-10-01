@@ -14,6 +14,7 @@ class P1Config(BaseModel):
     max_segmentation_retry: int = Field(default=3, ge=0, le=10)
     max_scene_retry: int = Field(default=2, ge=0, le=10)
     max_problem_regions: int = Field(default=12, ge=1, le=100)
+    detection_prefetch_regions: int = Field(default=4, ge=1, le=16)
     coverage_cell_size: int = Field(default=128, ge=16)
     edge_density_threshold: float = Field(default=.08, gt=0, le=1)
     unassigned_threshold: float = Field(default=.01, ge=0, le=1)

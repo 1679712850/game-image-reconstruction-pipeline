@@ -35,7 +35,13 @@ def local_windows(bbox, size, maximum, attempt=0):
     return [(x, y, r, b)]
 
 
-def candidate_metrics(mask, box, image, confidence, negative=None):
+def nearby_edges(image):
+    """Image-only evidence shared by all masks predicted for this crop."""
+    edges = cv2.Canny(np.asarray(image.convert("RGB")), 60, 150)
+    return cv2.dilate(edges, np.ones((3, 3), np.uint8)) > 0
+
+
+def candidate_metrics(mask, box, image, confidence, negative=None, *, nearby=None):
     active = np.asarray(mask) > 0
     h, w = active.shape
     x, y, r, b = np.rint(box).astype(int)
@@ -45,8 +51,8 @@ def candidate_metrics(mask, box, image, confidence, negative=None):
     ratio = inside / max(1, (r-x)*(b-y))
     leak = (area-inside)/max(1, area)
     boundary = cv2.morphologyEx(active.astype(np.uint8), cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 0
-    edges = cv2.Canny(np.asarray(image.convert("RGB")), 60, 150)
-    nearby = cv2.dilate(edges, np.ones((3, 3), np.uint8)) > 0
+    if nearby is None:
+        nearby = nearby_edges(image)
     edge = float((nearby & boundary).sum()/max(1, boundary.sum()))
     overlap = 0.0
     if negative:
@@ -90,7 +96,9 @@ class LocalRefiner:
                 with instance_scope(record['id'], attempt):
                     masks, scores = self.service.predict_candidates(image, prompts)
                 negatives = prompts["point_coords"][prompts["point_labels"] == 0].tolist()
-                metrics = [candidate_metrics(mask, prompts["box"], image, score, negatives) for mask, score in zip(masks, scores)]
+                nearby = nearby_edges(image)
+                metrics = [candidate_metrics(mask, prompts["box"], image, score, negatives, nearby=nearby)
+                           for mask, score in zip(masks, scores)]
                 best = max(range(len(metrics)), key=lambda i: metrics[i]["score"])
                 chosen = Image.fromarray((masks[best] > 0).astype(np.uint8)*255).resize(crop.size, Image.Resampling.NEAREST)
                 canvas[y:b, x:r] = np.maximum(canvas[y:b, x:r], np.asarray(chosen))

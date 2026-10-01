@@ -69,11 +69,15 @@ class P0DetectionPipeline:
             else:
                 scans.append({'source':'tile','tile_id':None,'window':[0,0,image.width,image.height],
                               'categories':[],'status':'budget_exhausted','candidates':0,'pass_id':'gap_fill'})
-        initial, _ = fuse_candidates(raw, cfg.dedup)
+        initial, initial_duplicates = fuse_candidates(raw, cfg.dedup)
+        initial_count = len(raw)
         edge_candidates = [c for c in initial if c.is_truncated]
         LOG.info("[Truncation] candidates=%d", len(edge_candidates))
         raw, invalid, redetections = recover_edges(image,edge_candidates,raw,invalid,infer,collect,scans,cfg,budget)
-        fused, duplicates = fuse_candidates(raw, cfg.dedup)
+        # Recovery only appends matched observations. With no new observations,
+        # reuse the identical first fusion (including its rejected lineage).
+        fused, duplicates = (fuse_candidates(raw, cfg.dedup) if len(raw) != initial_count
+                             else (initial, initial_duplicates))
         kept, rejected, review = filter_candidates(fused, image.width*image.height, cfg.confidence)
         rejected_records = [*invalid, *({**c.serializable(), "reason": c.reject_reason} for c in [*duplicates, *rejected])]
         small = [c for c in kept if c.area < image.width*image.height*cfg.confidence.small_area_ratio]

@@ -1,4 +1,4 @@
-"""Bounded problem-region detection with original-coordinate, unique instances."""
+"""Frozen pre-optimization recovery oracle. Keep its ordering semantics unchanged."""
 from pathlib import Path
 
 from PIL import Image
@@ -9,7 +9,13 @@ from postprocess.truncation_detector import truncated_edges
 from scene.element_classifier import SceneElementClassifier
 from schemas.object import BBox, SceneObject
 from services.detection_postprocess import iou
-from retry.detection_schedule import RegionDetectionSchedule, write_crop, region_key
+
+
+def region_key(region):
+    """Stable budget key, shared across P1 scene review rounds."""
+    box = region['approx_bbox']
+    category = (region.get('category') or '').lower().replace(' ', '_')
+    return [category, *(box[k] for k in ('x', 'y', 'w', 'h'))]
 
 
 def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
@@ -21,7 +27,6 @@ def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
     known = state.get('objects', [])
     used_ids = {r['id'] for r in [*known, *state.get('all_detections', [])]}
     sequence = 0
-    schedule = RegionDetectionSchedule(state, regions, detector, config, source, categories, scene_attempt)
     seen = set()
     for index, region in enumerate(regions[:config.p1.max_problem_regions]):
         key = region_key(region)
@@ -38,11 +43,21 @@ def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
                    'region_key': key, 'bbox': region['approx_bbox'], 'action': 'local_detection',
                    'previous_score': 0.0, 'new_score': 0.0, 'accepted_ids': [], 'rejected': []}
             try:
+                box = BBox.model_validate(region['approx_bbox'])
+                pad = 32 * (attempt + 1)
+                x, y = max(0, box.x-pad), max(0, box.y-pad)
+                right, bottom = min(source.width, box.x+box.w+pad), min(source.height, box.y+box.h+pad)
+                if right <= x or bottom <= y:
+                    raise ValueError('Problem region lies outside the original image')
+                crop = source.crop((x, y, right, bottom))
+                scale = 2 if max(crop.size) < 512 else 1
+                crop = crop.resize((crop.width*scale, crop.height*scale), Image.Resampling.LANCZOS)
                 path = root/'debug'/f'qa_detect_s{scene_attempt}_{index}_{attempt}.png'
-                x, y, right, bottom, scale = write_crop(source, region, attempt, path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                crop.save(path)
                 log['crop_path'] = str(path.resolve())
                 prompts = [region['category']] if region.get('category') else categories
-                for item in schedule.detect(index, attempt, path, prompts, len(known)+len(recovered)):
+                for item in detector.detect(str(path), prompts):
                     if config.scene_loop.max_objects is not None and len(known) + len(recovered) >= config.scene_loop.max_objects:
                         break
                     local = BBox.model_validate(item['bbox'])
@@ -86,7 +101,7 @@ def recover_regions(state, regions, detector, sam, config, *, scene_attempt=1):
                         log['rejected'].append({'id': ident, 'bbox': global_box, 'failure_types': failures,
                                                 'error': record.get('error'), 'score': metrics['quality_score']})
             except (ValueError, RuntimeError, OSError) as error:
-                log['error'] = getattr(error, 'original_type', type(error).__name__)
+                log['error'] = type(error).__name__
             log['improved'] = bool(log['accepted_ids'])
             history.append(log)
             if log['improved']:

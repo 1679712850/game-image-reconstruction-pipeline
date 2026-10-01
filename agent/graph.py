@@ -51,6 +51,7 @@ def build_graph(
     checkpointer: BaseCheckpointSaver | None = None,
     interrupt_before: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
+    progress_detail: Callable[[str], None] | None = None,
     categories_path: Path | None = None,
 ) -> CompiledStateGraph:
     """Compile the real StateGraph; closures keep services out of checkpoints."""
@@ -101,7 +102,10 @@ def build_graph(
         "crop_objects": make_crop_objects(options.crop),
         "qa_objects": make_qa_objects(options),
         "retry_objects": make_retry_objects(options, adapters.sam, reviewer, adapters.grounding),
-        "upscale_objects": make_upscale_objects(adapters.upscale, options.upscale.enabled, reviewer, options.candidates, options.upscale.required),
+        "upscale_objects": make_upscale_objects(
+            adapters.upscale, options.upscale.enabled, reviewer, options.candidates,
+            options.upscale.required, progress=progress_detail,
+        ),
         "build_metadata": build_metadata,
         "reconstruct_scene": make_reconstruct_scene(options.reconstruction.enabled, options.p1),
         "export": make_export(options.mock, {

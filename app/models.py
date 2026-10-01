@@ -26,6 +26,9 @@ class GroundingConfig(Options):
     relax_from_round: int = Field(default=3, ge=2)
     relaxed_box_threshold: float = Field(default=0.25, ge=0, le=1)
     relaxed_text_threshold: float = Field(default=0.20, ge=0, le=1)
+    reuse_image_inputs: bool = True
+    # Keep serial numerics by default; CUDA batching requires device validation.
+    batch_size: int = Field(default=1, ge=1, le=8)
 
     @field_validator("prompts")
     @classmethod
@@ -112,6 +115,7 @@ class UpscaleModelConfig(Options):
     checkpoint: Path | None = None
     tile: int = Field(default=256, ge=0)
     tile_pad: int = Field(default=16, ge=0)
+    skip_transparent_tiles: bool = True
     max_output_pixels: int = Field(default=67_108_864, ge=4096)
 
 

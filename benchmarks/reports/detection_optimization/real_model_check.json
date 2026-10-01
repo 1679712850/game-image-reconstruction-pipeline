@@ -1,0 +1,38 @@
+{
+  "device": "cpu",
+  "model": "IDEA-Research/grounding-dino-tiny",
+  "crop_size": [
+    768,
+    768
+  ],
+  "groups": [
+    [
+      "tree",
+      "rock"
+    ],
+    [
+      "building",
+      "flag"
+    ],
+    [
+      "stone_lantern",
+      "tombstone"
+    ]
+  ],
+  "counts": [
+    107,
+    40,
+    33
+  ],
+  "serial_outputs_exact": true,
+  "batch_labels_equal": true,
+  "batch_max_confidence_error": 0.0002546235918998718,
+  "batch_max_bbox_error_pixels": 0.0599365234375,
+  "timings_seconds": {
+    "baseline": 34.31340474999888,
+    "reuse": 17.463438875005522,
+    "batch": 22.756510665996757
+  },
+  "note": "Single CPU run; baseline first includes warm-up. Timings do not establish speedup. Batch remains opt-in.",
+  "checkpoint_revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71"
+}

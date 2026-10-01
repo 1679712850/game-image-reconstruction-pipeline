@@ -641,6 +641,32 @@ The report has three layers: detection quality (recall, precision, duplicates, f
 
 `upscale.enabled` may be `false`, `true`, or `auto`; YAML defaults to `false`. Upscale errors update `enhancement.status` and do not change `base_asset_status`. Required HD failure adds delivery review; base assessment remains factual. The default factor policy is centralized in `resolve_upscale_factor`: `<128px` is 4x and all larger assets are 2x; `choose_scale` remains a compatibility alias.
 
+启用高清处理后，CLI 在放大（`Upscale`）和视觉验收（`HD QA`）两个阶段分别输出进度。每个对象完成时刷新，单次推理很慢时也会每 10 秒刷新，并显示当前对象及成功/失败计数。例如：
+
+```text
+[Upscale] 87/300 (29.0%)
+elapsed=00:31:42
+avg=21.9s/object
+eta=01:17:37
+estimated_finish=19:54
+```
+
+`avg` 为当前阶段已耗时 / 已完成对象数（包含失败对象）；`eta` 和 `estimated_finish` 仅估计当前阶段，不包含后续 HD QA 或导出。首个对象完成前显示未知；预计跨日完成时包含日期，时间使用运行机器的本地时区。跳过的对象不计入处理队列。其他节点结束日志也显示耗时。库调用可通过 `build_graph(progress_detail=callback)` 接收相同文本；原有节点名 `progress` 回调保持兼容。
+
+Real-ESRGAN 与视觉 QA 采用两段式调度：先连续完成所有对象的放大，再集中执行 HD QA，避免数百个对象之间反复卸载和加载两个 GPU 模型。阶段间仅保留文件路径，验收通过后才标记 HD ready。原有带内容和模型指纹的执行缓存继续支持复用；不会仅凭同名 PNG 或修改时间接受旧结果。
+
+`models.yaml` 的 `upscale.skip_transparent_tiles: true` 默认跳过完全透明且不会影响可见边缘的分块，保留 Lanczos 采样保护区、原始画布及 alpha。可设为 `false` 对比完整分块推理。CUDA 上使用 channels-last 卷积布局，不改变模型权重或浮点精度。收益取决于透明区域比例、设备及原先模型装载开销；尚未使用真实 CUDA 权重测量端到端加速比。
+
 Exported manifests use schema `1.2`. `schemas.migration.normalize_manifest` accepts 1.1 and adds explicit visible/full geometry plus base/enhancement status. Full reconstructed assets can exceed the visible source crop.
 
 See [the engineering contracts](docs/ENGINEERING_EVALUATION.md) for configuration consumers, detection scheduling, metric definitions and reproducible commands; [the delivery report](docs/IMPLEMENTATION_REPORT.md) records tests, real-image results and remaining acceptance limits.
+
+检测速度优化（保持默认检测结果与预算语义）
+
+- P0 同一窗口的多个类别组只裁剪一次，并在提示词切换时复用图像预处理；类别、窗口、阈值和输出解析保持不变。
+- P1 局部补检支持有预算约束的 DINO 预取：只在能保证后续区域会被访问、且不会挤占前面区域重试预算时预先检测；SAM、QA、ID 分配、重试顺序仍按原顺序提交。第三方 detector 未提供保守 `detect_bounds` 时自动回到串行路径。
+- 同一局部裁剪的 SAM 候选共用一次 Canny/边缘膨胀结果。
+- 候选融合使用按类别和空间单元的索引，匹配判定、排序和合并顺序保持不变；补检未增加有效候选时避免第二次重复融合。
+- `grounding.batch_size` 默认 `1`。CUDA 可显式设为 `2` 或 `4` 试运行；仅将同一窗口、同样 token 长度的提示词组一起推理，批次 OOM 会拆分。由于批次浮点归约可能产生数值差异，要求逐像素/逐分数复现时保持 `1`。
+
+实现细节、复现命令与实测范围见 [检测性能验证](docs/DETECTION_PERFORMANCE.md)。
